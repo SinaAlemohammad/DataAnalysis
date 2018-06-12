@@ -1,0 +1,157 @@
+---
+title: "Fifth Week: Bootstrap and Resampling Methods"
+subtitle: "Nonparametric Hypothesis tests"
+author: "Sina Alemohammad 93111706"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+<div align="center">
+<img  src="images/NonparametricStatistics_iStock.jpg"  align = 'center'>
+</div>
+
+#Libraries
+
+```{r, message=FALSE, warning=FALSE}
+library(dplyr)
+library(highcharter)
+library(readr)
+```
+
+#Problem 1
+
+I have used bootstrap and I used the mean of the sampled data as the statistic. 
+
+```{r, message=FALSE, warning=FALSE}
+data = c(102, 300, 102, 100, 205, 105, 71 , 92)
+
+data.mean = mean(data)
+mean.boot = 1:10000
+for (i in 1:10000) {
+  temp = sample(data, 8, replace = TRUE)
+  mean.boot[i] = mean(temp)
+}
+temp = (1:200)/400
+flag = 1
+i = 1
+while(flag == 1)
+{
+  i = i+1
+  qu = quantile(mean.boot, c(temp[i],1-temp[i]))
+  if ((data.mean < qu[1]) | (data.mean > qu[2]))
+  {
+    flag = 0
+  }
+}
+sprintf("The data mean is the %f and %f interval.", temp[i], 1-temp[i])
+
+density(mean.boot) %>% 
+  hchart(type = "area", name = "Shop Mean Values") %>% 
+  hc_xAxis(title = list(text = "Mean Value"), opposite = TRUE,
+           plotLines = list(list(label = list(text = "Sample Mean"),
+                  color = "#00FF00",
+                  width = 3,
+                  value = data.mean))) %>% 
+  hc_yAxis(title = list(text = "Density")) %>% 
+  hc_title(text = "Distribution of Mean Values")
+
+```
+
+#Problem 2
+
+I have used permutation test for testing the equality of the distributions.
+
+```{r, message=FALSE, warning=FALSE}
+classic = c(50, 50, 60, 70, 75, 80, 90, 85)
+modern = c(55, 75, 80, 90, 105, 65)
+mydata = data.frame(store = c(classic,modern),
+                    type = factor(c(rep("classic",8), rep("modern",6))))
+coin::oneway_test(store ~ type , data=mydata, distribution="exact")
+
+```
+
+Based on the p value, the null hypothesis cant be rejected.
+
+#Problem 3
+
+I have used Wilcox test.
+
+```{r, message=FALSE, warning=FALSE}
+before = c(509, 517, 502, 629, 830, 911, 847, 803, 727,853, 757, 730, 774, 718, 904)
+after = c(517, 508, 523,730, 821, 940, 818, 821, 842, 842, 709, 688,787, 780, 901)
+wilcox.test(before,after)
+
+```
+
+Based on the p value, the null hypothesis cant be rejected.
+
+#Problem 4
+
+Because of different sample size, I used Kruskal test
+
+```{r, message=FALSE, warning=FALSE}
+mydata = data.frame(count = c(510, 720, 930, 754, 105, 925, 735, 753, 685,
+                                730, 745, 875, 610),
+                      color = factor(c(rep("White", 5), 
+                                           rep("Blue", 4),
+                                           rep("Red", 4))))
+kruskal.test(count ~ color, data = mydata)
+```
+
+Based on the p value, the null hypothesis cant be rejected.
+
+#Problem 5
+
+I used Friedman test.
+
+```{r, message=FALSE, warning=FALSE}
+data = read.csv("./tv.csv")
+data = as.matrix(data)
+friedman.test(data)
+```
+
+Based on the p value, the null hypothesis cant be rejected.
+
+#Problem 6
+
+I used ch square independence test.
+
+```{r, message=FALSE, warning=FALSE}
+small = c(151,252,603)
+medium = c(802,603,405)
+larg = c(753,55,408)
+data = rbind(small,medium,larg)
+chisq.test(data)
+```
+
+Based on the p value, we all almost surely reject the null hypothesis.
+
+#Problem 7
+
+I used the Kendall correlation test.
+
+```{r, message=FALSE, warning=FALSE}
+data = read.csv("./consumption.csv")
+data %>% hchart(type = "scatter", hcaes(x = A, y = B)) %>% 
+   hc_title(text = "Scatter plot of products ")
+  
+cor.test(data$A,data$B,method = "kendall")
+```
+
+Based on the p value and correlation, the null hypothesis of relationship between products cant be rejected.
+
+#Problem 8
+
+I used chi square goodness of fit two compare the male and female. 
+
+```{r, message=FALSE, warning=FALSE}
+male = c(301,353,558)
+female = c(502,155,153)
+chisq.test(male,female)
+
+```
+
+Based on the p value, the null hypothesis cant be rejected.

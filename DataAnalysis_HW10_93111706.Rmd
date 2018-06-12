@@ -1,0 +1,465 @@
+---
+title: "Cluster Analysis"
+subtitle: "WDI Indicators"
+author: "student name"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+<div align="center">
+<img  src="images/best_hans_talks_1200x627.jpg"  align = 'center'>
+</div>
+
+#Introduction
+
+These are the used packages in this study
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+library("highcharter")
+library("WDI")
+library("dplyr")
+library("ggplot2")
+library("wordcloud2")
+library("ape")
+
+```
+
+#Problem 1
+
+because 2010 has the most available data for PPP data, I used the 2010 data for the analysis of poor countries
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+#cashe <- WDIcache()
+#saveRDS(cashe, file = "cashe.rds")
+cashe = readRDS("cashe.rds")
+countries = cashe[[2]]
+series = cashe[[1]]
+#data = WDI(indicator = c("NY.GDP.PCAP.PP.CD", "SI.POV.GAPS", "SP.DYN.LE00.IN"),extra = TRUE, start = 1960, end = 2018) 
+#saveRDS(data, file = "data.rds")
+data = readRDS("data.rds")
+ppp.year <- subset(data, region != "Aggregates" ) %>% na.omit() %>% group_by(year) %>% summarise( count = n())
+ppp.year %>% hchart("column" , hcaes(x = year, y = count)) %>%
+  hc_title(text = "Number of data available counties for each year ")
+ppp = subset(data, region != "Aggregates") %>% 
+  na.omit() %>% filter(year == 2010) %>%  
+  arrange(desc(SI.POV.GAPS)) %>% slice(1:10)
+ppp %>% hchart("column" , hcaes(x = country , y = SI.POV.GAPS)) %>% 
+  hc_title(text = "10 Most countries with most percent of poors") %>% 
+  hc_subtitle(text = "Based on Poverty Gap index")
+ppp %>% hchart("column" , hcaes(x = country , y = NY.GDP.PCAP.PP.CD/365)) %>% 
+  hc_title(text = "PPP of the poor countries") 
+ppp %>% hchart("column" , hcaes(x = country , y = SP.DYN.LE00.IN)) %>% 
+  hc_title(text = "Life expectancy") 
+
+
+
+
+
+```
+
+#Problem 2
+
+Based on the Wikipedia, One million people have been killed in the Rwanda tragedy. As you can see in the plot, the life expectancy of Rwanda falls dramatically in the 90's.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+life = subset(data, region != "Aggregates") %>% 
+  select(country = country , year = year , LifeExpectancy = SP.DYN.LE00.IN) %>% 
+  na.omit()
+
+
+life.rwanda = life %>% filter(country == "Rwanda") %>% group_by(year) %>% summarise( LifeExpectancy  = mean( LifeExpectancy )) 
+
+ggplot(life) + 
+  geom_boxplot(aes( y = LifeExpectancy , x= year , group = year , color = year),
+               outlier.colour="black", outlier.shape=1, outlier.size=2 ) +
+  geom_line(data = life.rwanda , aes(x = year, y =  LifeExpectancy), color = "red")+
+  ggtitle("Rwanda Tragedy") + 
+  theme(legend.position= "none")
+  
+
+```
+
+#Problem 3
+
+The scatter plot of health expenditure and life expectancy for all years and all countries is plotted. 
+It show that a little increase in the health expenditure can have a considerable effect on the life expectancy, while spending more on health expenditure doesn't effect the life expectancy too much, as it has reached its natural limit.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+#health.data = WDI(indicator = c("SH.XPD.CHEX.PC.CD" , "SP.DYN.LE00.IN"),
+               #extra = TRUE, start = 1960, end = 2018) 
+#saveRDS(health.data, file = "health.rds")
+health.data = readRDS("health.rds")
+subset(health.data ,  region != "Aggregates" ) %>% na.omit() -> health
+health %>% hchart("scatter" , hcaes(x = SH.XPD.CHEX.PC.CD , y = SP.DYN.LE00.IN , group = year)) %>% 
+  hc_xAxis(title = list(text = 'Health expenditure')) %>% 
+  hc_yAxis(title = list(text = 'Life Expectancy')) %>% 
+  hc_title(text = 'Health expenditure per capita VS Life Expectancy') %>% 
+  hc_subtitle(text = "From 2010 to 2015 for all countries")
+
+```
+
+#Problem 4
+
+There is considerable increase in the purchasing power parity of Iran since 1990. (the data for the previous years was not available)
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+
+iran.ppp <- data %>% filter(country == "Iran, Islamic Rep.") %>% select(ppp = "NY.GDP.PCAP.PP.CD" , year = year ) %>%
+  na.omit() %>% arrange(year)
+iran.ppp %>% hchart("spline" , hcaes(x = year , y = ppp)) %>% 
+  hc_title(text = "Purchasing power parity from 1990")
+
+```
+
+#Problem 5
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+factor.ecom = c("NY.EXP.CAPM.KN", "NY.GDP.DEFL.KD.ZG", "NY.GDP.FCST.CD",
+  "NY.TRF.NCTR.CD", "NY.TAX.NIND.CD", "NY.GSR.NFCY.CD",
+  "NY.GNS.ICTR.ZS", "NY.GNP.PCAP.PP.CD", "NY.GDP.PCAP.PP.CD",
+  "NY.GNP.PCAP.KD", "NY.GNP.PCAP.KD.ZG", "NY.GDP.PCAP.KD.ZG",
+  "NY.ADJ.NNTY.CD", "NY.GDP.COAL.RT.ZS", "NY.GDP.FRST.RT.ZS",
+  "NY.GDP.MINR.RT.ZS", "NY.GDP.PETR.RT.ZS", "NY.GNP.ATLS.CD",
+  "NY.GDP.NGAS.RT.ZS", "NY.GDP.TOTL.RT.ZS")
+#dataecom = WDI(indicator = factor.ecom,extra = TRUE, start = 1990, end = 2018) 
+#saveRDS(dataecom, file = "dataecom.rds")
+dataecom = readRDS("dataecom.rds")
+
+
+subset(dataecom, region != "Aggregates") %>% filter(country == "Iran, Islamic Rep.") %>% arrange(year) -> iran
+
+world = data.frame()
+for (i in 1990:2017) {
+  subset(dataecom, region != "Aggregates") %>% filter(country != "Iran, Islamic Rep.") %>% select(year, 4:23) %>% 
+  filter(year == i) %>% colMeans(na.rm = TRUE) -> current_data
+  rbind(world, current_data) -> world
+}
+colnames(world) = c("year", factor.ecom)
+
+
+charts = list()
+
+for (i in 1:20){
+  inc = factor.ecom[[i]]
+  iran %>% select(year , factor.ecom[[i]]) %>% mutate(place = "Iran") -> temp1
+  world %>% select(year , factor.ecom[[i]]) %>% mutate(place = "World") -> temp2
+  temp = rbind(temp1, temp2)
+  name = as.character(series[which(series[,1] == factor.ecom[[i]] ),2])
+  colnames(temp) <- c("year" , "Indicator" , "place")  
+  temp %>% hchart("column" , hcaes(x  = year , y = Indicator , group = place)) %>% 
+    hc_title(text = name)-> hc
+ charts[[i]] = hc
+}
+htmltools::tagList(charts)
+
+
+```
+
+#Problem 6
+
+Each factor data mean is set to zeros and its maximum absolute value if normalized to zero.
+The Iran cluster based on economic data is shown by word cloud.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+subset(dataecom, region != "Aggregates") %>% group_by(country) %>% select(country, 4:23) %>% 
+  summarise_all(funs(mean, "mean", mean(., na.rm = TRUE))) %>% as.matrix() -> data.clustering
+is.na(data.clustering) -> temp
+data.clustering[temp] = 0
+as.data.frame(data.clustering) -> data.clustering
+rownames(data.clustering) = data.clustering$country
+data.clustering %>% select(-country) -> data.clustering
+for (i in 1:20){
+  temp = as.numeric(data.clustering[,i])
+  temp = temp - mean(as.numeric(temp))
+  temp = temp/max(abs(temp))
+  data.clustering[,i] = temp
+}
+
+
+pc <- prcomp(data.clustering)
+x = pc[[5]]
+pc1 = x[,1]
+pc2 = x[,2]
+kmeans(data.clustering, 3)-> clus
+c = clus[[1]]
+temp = as.data.frame(cbind(pc1,pc2,c))
+country = row.names(temp)
+temp = cbind(temp , country)
+irangroup = temp["Iran, Islamic Rep.",3]
+temp %>% filter(c == irangroup) %>% select(country) %>% mutate(freq = 1) -> temp2
+i = which(temp2$country == "Iran, Islamic Rep.")
+temp2[i,2] = 3
+wordcloud2(temp2, fontFamily="Calibri" , size = 0.2, shape =  'pentagon' , color = 'random-light' , backgroundColor = "grey")
+```
+
+#Problem 7
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+temp %>% hchart("scatter" , hcaes(x = pc1, y = pc2 , group = c)) %>% 
+  hc_title(text = "Clustering results ") %>% 
+  hc_subtitle(text = "Based on 20 economic factors")
+
+```
+
+The clustering results are good.
+
+#Problem 8
+
+We can use the economic, or health and education, to predict the next years factors by a linear regression model. We can use the every year factor and its previous years , let say K years, to train our model. Similar to what we have done in the previous assignments.
+Although, I have to say that ts unlikely to be able to predict the next years factors based on the previous years, especially for a country like Iran, as these factors are dependent to many many other factors including country and world policy and many other parameters. 
+
+#Problem 9, Health factors
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+factor.health = c("SH.XPD.CHEX.GD.ZS", "SH.XPD.CHEX.PC.CD", "SH.XPD.CHEX.PP.CD",
+                  "SH.XPD.GHED.CH.ZS", "SH.XPD.GHED.GD.ZS", "SH.XPD.GHED.GE.ZS",
+                  "SH.XPD.GHED.PC.CD", "SH.XPD.PVTD.CH.ZS", "SH.XPD.PVTD.PC.CD",
+                  "SH.IMM.IDPT", "SH.MMR.RISK.ZS", "SH.DYN.MORT",
+                  "SH.H2O.SMDW.ZS", "SH.XPD.OOPC.CH.ZS", "SH.XPD.OOPC.PC.CD",
+                  "SH.VAC.TTNS.ZS", "SP.DYN.LE00.IN", "SH.DYN.AIDS.FE.ZS",
+                  "SH.IMM.MEAS", "SH.IMM.HEPB")
+#datash = WDI(indicator = factor.health,extra = TRUE, start = 1990, end = 2018) 
+#saveRDS(datash, file = "datash.rds")
+datash = readRDS("datash.rds")
+
+
+subset(datash, region != "Aggregates")  %>% filter(country == "Iran, Islamic Rep.") %>% arrange(year) -> iran
+
+world = data.frame()
+for (i in 1990:2017) {
+  subset(datash, region != "Aggregates")%>% filter(country != "Iran, Islamic Rep.") %>% select(year, 4:23) %>% 
+  filter(year == i) %>% colMeans(na.rm = TRUE) -> current_data
+  rbind(world, current_data) -> world
+}
+colnames(world) = c("year", factor.health)
+
+
+charts = list()
+
+for (i in 1:20){
+  inc = factor.health[[i]]
+  iran %>% select(year , factor.health[[i]]) %>% mutate(place = "Iran") -> temp1
+  world %>% select(year , factor.health[[i]]) %>% mutate(place = "World") -> temp2
+  temp = rbind(temp1, temp2)
+  name = as.character(series[which(series[,1] == factor.health[[i]] ),2])
+  colnames(temp) <- c("year" , "Indicator" , "place")  
+  temp %>% hchart("column" , hcaes(x  = year , y = Indicator , group = place)) %>% 
+    hc_title(text = name)-> hc
+ charts[[i]] = hc
+}
+htmltools::tagList(charts)
+
+```
+
+Each factor data mean is set to zeros and its maximum absolute value if normalized to zero.
+The Iran cluster based on health data is shown by word cloud.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+subset(datash, region != "Aggregates")  %>% group_by(country) %>% select(country, 4:23) %>% 
+  summarise_all(funs(mean, "mean", mean(., na.rm = TRUE))) %>% as.matrix() -> data.clustering2
+is.na(data.clustering2) -> temp
+data.clustering2[temp] = 0
+as.data.frame(data.clustering2) -> data.clustering2
+rownames(data.clustering2) = data.clustering2$country
+data.clustering2 %>% select(-country) -> data.clustering2
+for (i in 1:20){
+  temp = as.numeric(data.clustering2[,i])
+  temp = temp - mean(as.numeric(temp))
+  temp = temp/max(abs(temp))
+  data.clustering2[,i] = temp
+}
+
+
+pc <- prcomp(data.clustering2)
+x = pc[[5]]
+pc1 = x[,1]
+pc2 = x[,2]
+kmeans(data.clustering2, 3)-> clus
+c = clus[[1]]
+temp = as.data.frame(cbind(pc1,pc2,c))
+country = row.names(temp)
+temp = cbind(temp , country)
+irangroup = temp["Iran, Islamic Rep.",3]
+temp %>% filter(c == irangroup) %>% select(country) %>% mutate(freq = 1) -> temp2
+i = which(temp2$country == "Iran, Islamic Rep.")
+temp2[i,2] = 3
+wordcloud2(temp2, fontFamily="Calibri" , size = 0.3, shape =  'pentagon' , color = 'random-light' , backgroundColor = "grey")
+
+
+```
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+temp %>% hchart("scatter" , hcaes(x = pc1, y = pc2 , group = c)) %>% 
+  hc_title(text = "Clustering results ") %>% 
+  hc_subtitle(text = "Based on 20 health factors")
+
+```
+
+The clustering results are good.
+
+#Problem 9, Education factors
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+
+factor.edu = c("NY.ADJ.AEDU.GN.ZS", "NY.ADJ.AEDU.CD", "SE.ENR.PRIM.FM.ZS",
+                  "SE.ENR.SECO.FM.ZS", "SE.PRM.ENRR.FE", "SE.PRM.ENRR.MA",
+                  "SE.PRM.UNER.MA.ZS", "SE.PRM.UNER.FE.ZS", "SE.XPD.TOTL.GD.ZS",
+                  "SE.XPD.TOTL.GB.ZS", "SE.XPD.SECO.PC.ZS", "SE.XPD.TERT.PC.ZS",
+                  "SE.PRM.DURS", "SE.XPD.PRIM.PC.ZS", "SE.TER.CUAT.ST.MA.ZS",
+                  "SE.PRM.TCHR", "SE.PRM.GINT.FE.ZS", "SE.PRM.GINT.MA.ZS",
+                  "SE.SEC.ENRL.GC", "SE.SEC.ENRL.VO")
+
+
+#dataedu = WDI(indicator = factor.edu,extra = TRUE, start = 1990, end = 2018) 
+#saveRDS(dataedu, file = "dataedu.rds")
+dataedu = readRDS("dataedu.rds")
+
+
+subset(dataedu, region != "Aggregates")  %>% filter(country == "Iran, Islamic Rep.") %>% arrange(year) -> iran
+
+world = data.frame()
+for (i in 1990:2017) {
+  subset(dataedu, region != "Aggregates")%>% filter(country != "Iran, Islamic Rep.") %>% select(year, 4:23) %>% 
+  filter(year == i) %>% colMeans(na.rm = TRUE) -> current_data
+  rbind(world, current_data) -> world
+}
+colnames(world) = c("year", factor.edu)
+
+
+charts = list()
+
+for (i in 1:20){
+  inc = factor.edu[[i]]
+  iran %>% select(year , factor.edu[[i]]) %>% mutate(place = "Iran") -> temp1
+  world %>% select(year , factor.edu[[i]]) %>% mutate(place = "World") -> temp2
+  temp = rbind(temp1, temp2)
+  name = as.character(series[which(series[,1] == factor.edu[[i]] ),2])
+  colnames(temp) <- c("year" , "Indicator" , "place")  
+  temp %>% hchart("column" , hcaes(x  = year , y = Indicator , group = place)) %>% 
+    hc_title(text = name)-> hc
+ charts[[i]] = hc
+}
+htmltools::tagList(charts)
+
+```
+
+Each factor data mean is set to zeros and its maximum absolute value if normalized to zero.
+The Iran cluster based on education data is shown by word cloud.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+subset(dataedu, region != "Aggregates")  %>% group_by(country) %>% select(country, 4:23) %>% 
+  summarise_all(funs(mean, "mean", mean(., na.rm = TRUE))) %>% as.matrix() -> data.clustering3
+is.na(data.clustering3) -> temp
+data.clustering3[temp] = 0
+as.data.frame(data.clustering3) -> data.clustering3
+rownames(data.clustering3) = data.clustering3$country
+data.clustering3 %>% select(-country) -> data.clustering3
+for (i in 1:20){
+  temp = as.numeric(data.clustering3[,i])
+  temp = temp - mean(as.numeric(temp))
+  temp = temp/max(abs(temp))
+  data.clustering3[,i] = temp
+}
+
+
+pc <- prcomp(data.clustering3)
+x = pc[[5]]
+pc1 = x[,1]
+pc2 = x[,2]
+kmeans(data.clustering3, 3)-> clus
+c = clus[[1]]
+temp = as.data.frame(cbind(pc1,pc2,c))
+country = row.names(temp)
+temp = cbind(temp , country)
+irangroup = temp["Iran, Islamic Rep.",3]
+temp %>% filter(c == irangroup) %>% select(country) %>% mutate(freq = 1) -> temp2
+i = which(temp2$country == "Iran, Islamic Rep.")
+temp2[i,2] = 3
+wordcloud2(temp2, fontFamily="Calibri" , size = 0.3, shape =  'pentagon' , color = 'random-light' , backgroundColor = "grey")
+
+
+```
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+temp %>% hchart("scatter" , hcaes(x = pc1, y = pc2 , group = c)) %>% 
+  hc_title(text = "Clustering results ") %>% 
+  hc_subtitle(text = "Based on 20 education factors")
+
+```
+
+The clustering results are good.
+
+#Problem 10
+
+The Iran cluster based on health, education and economic data is shown by word cloud.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+
+clustering = cbind(data.clustering,data.clustering2,data.clustering3)
+
+dist = stats::dist(clustering,method = "euclidean")
+clus = hclust(dist,method = "complete")
+plot(clus,hang = -1)
+rect.hclust(clus, 3)
+temp= as.data.frame(cutree(clus,k=3))
+colnames(temp) <- "c"
+country = row.names(temp)
+temp = cbind(temp , country)
+irangroup = temp["Iran, Islamic Rep.",1]
+temp %>% filter(c == irangroup) %>% select(country) %>% mutate(freq = 1) -> temp2
+i = which(temp2$country == "Iran, Islamic Rep.")
+temp2[i,2] = 3
+wordcloud2(temp2, fontFamily="Calibri" , size = 0.3, shape =  'pentagon' , color = 'random-light' , backgroundColor = "grey")
+
+
+```
+
+
+
+#Problem 11
+
+The world has a decreasing trend on the percentage of Electricity production from oil sources while Iran main source for electricity production is from oil.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+
+#WDI(indicator = "EG.ELC.PETR.ZS",extra = TRUE, start = 1990, end = 2018) -> oil
+#saveRDS(oil, file = "oil.rds")
+oil = readRDS("oil.rds")
+oil %>% filter(country %in% c("Iran, Islamic Rep.","World")) %>% arrange(year) -> temp
+temp %>% hchart("line",hcaes(x = year , y = EG.ELC.PETR.ZS , group = country)) %>% 
+  hc_title(text = "Electricity production from oil sources (% of total)")
+
+```
+
+
+The data shows a decreasing trend in the percentage of electricity production from nuclear sources, while Iran is trying to develop its nuclear facilities for electricity production from 2010 unlike the world trend.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+#WDI(indicator = "EG.ELC.NUCL.ZS",extra = TRUE, start = 1990, end = 2018) -> nuc
+#saveRDS(nuc, file = "nuc.rds")
+nuc = readRDS("nuc.rds")
+nuc %>% filter(country %in% c("Iran, Islamic Rep.","World")) %>% arrange(year) -> temp
+temp %>% hchart("line",hcaes(x = year , y = EG.ELC.NUCL.ZS , group = country)) %>% 
+  hc_title(text = "Electricity production from nuclear sources (% of total)")
+
+```
+
+While, one the other hand, the world tries to use more of renewable energy and Iran doesn't care too much to the renewable sources.
+
+```{r}
+#WDI(indicator = "EG.FEC.RNEW.ZS",extra = TRUE, start = 1990, end = 2018) -> renew
+#saveRDS(renew, file = "renew.rds")
+renew = readRDS("renew.rds")
+renew %>% filter(country %in% c("Iran, Islamic Rep.","World")) %>% arrange(year) -> temp
+temp %>% hchart("line",hcaes(x = year , y = EG.FEC.RNEW.ZS , group = country)) %>% 
+  hc_title(text = "Renewable energy consumption (% of total final energy consumption")
+```
+
+To sum up, Iran is too dependent to the oil for its energy consummation and has tried to reduce its dependency to oil by using nuclear energy sources while ignoring the renewable sources which is on the contrary of world trend on energy consummation. 
+
+
+
+

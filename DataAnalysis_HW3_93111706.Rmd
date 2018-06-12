@@ -1,0 +1,451 @@
+---
+title: "Third Week: Exploratory Data Analysis"
+subtitle: "LaLiga Analysis"
+author: "Sina Alemohammad 93111706"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+<div align="center">
+<img  src="images/laliga-lo.jpg"  align = 'center'>
+</div>
+
+# Introduction 
+
+In this study, the report of Laliga data analysis is provided.
+This is the packages used in this study
+
+```{r, message=FALSE, warning=FALSE}
+library(readr)
+library(grid)
+library(gridExtra)
+library(dplyr)
+library(ggplot2)
+library(highcharter)
+library(devtools)
+library(engsoccerdata)
+library(ggthemes)
+```
+
+And this is the Laliga data preparation for next analysis.
+```{r, message=FALSE, warning=FALSE}
+spain %>% as.tbl() %>% filter(round=="league",tier==1) %>% select(1:8) -> laliga
+rbind(
+  laliga %>% 
+    select(Date, Season, team = home, opp = visitor, GF = hgoal, GA = vgoal),
+  laliga %>% 
+    select(Date, Season, team = visitor, opp = home, GF = vgoal, GA = hgoal)
+  
+) %>% mutate(GD=GF-GA) %>% arrange(Date)-> laliga
+```
+
+#Problem 1
+
+This is the code for problem 1. The teams with the same points has been ranked by their goal difference.
+
+```{r, message=FALSE, warning=FALSE}
+laliga %>% group_by(Season,team) %>% summarise( Pts = 3*sum(GD > 0) + sum(GD == 0) , Goaldif = sum(GD)) %>% 
+  group_by(Season) %>% arrange(Season , -Pts , -Goaldif )  %>% group_by(Season) %>% 
+  summarise(champion = team[1]) %>% group_by(champion) %>% 
+  summarise( Number.of.championship = n()) %>%  arrange( - Number.of.championship) %>%
+  hchart(type = "column" , hcaes(x = champion , y = Number.of.championship)) %>% 
+  hc_yAxis(title = list(text = "Number of Championship")) %>%
+  hc_xAxis(title = list(text = "Teams")) %>% 
+  hc_title(text = "Laliga Teams Championship") 
+```
+
+#Problem 2
+
+This is the code for problem 2. The Borringness is defined by the mean number of received or scored goals per match for each team (part 1) and each season (Part 2)
+
+```{r, message=FALSE, warning=FALSE }
+laliga %>% mutate(score = (GA + GF)) %>% group_by(team) %>% summarise(borring = mean(score)) %>% 
+  arrange(borring) %>% top_n(10, -borring) %>%
+  hchart(type = "column" , hcaes(x = team , y = borring)) %>% 
+  hc_yAxis(title = list(text = "Borringness")) %>%
+  hc_xAxis(title = list(text = "Teams")) %>% 
+  hc_title(text = "Most Borring Teams of Laliga") %>% 
+  hc_subtitle(text = "By the mean of total scored and recieved goals in one match") 
+
+laliga %>% mutate(score = (GA + GF)) %>% group_by(Season) %>% summarise(borring = mean(score)) %>% 
+  arrange(borring) %>% top_n(10, -borring) %>%
+  hchart(type = "column" , hcaes(x = as.character(Season), y = borring)) %>% 
+  hc_yAxis(title = list(text = "Borringness")) %>%
+  hc_xAxis(title = list(text = "Teams")) %>% 
+  hc_title(text = "Most Borring Seasons of Laliga") %>% 
+  hc_subtitle(text = "By the mean of total scored and recieved goals in one match") 
+```
+
+
+
+#Problem 3
+
+This is the code for problem 3. The teams with the same points has been ranked by their goal difference.
+
+```{r, message=FALSE, warning=FALSE}
+
+laliga %>% mutate( G.Pt = 3*(GD > 0) + (GD == 0)) %>% group_by(Season,team) %>%
+  mutate(Cum.Pts = cumsum(G.Pt) , n = 1:length(Cum.Pts)) %>% group_by(Season , team) %>% 
+  summarise(half.Pts = Cum.Pts[max(n)/2] , full.Pts = Cum.Pts[max(n)] , Goaldif = sum(GD)) %>% group_by(Season) %>% 
+  arrange(Season , -half.Pts , -Goaldif ) %>%  summarise(half.champion = team[1]) -> temp1
+
+
+laliga %>% mutate( G.Pt = 3*(GD > 0) + (GD == 0)) %>% group_by(Season,team) %>%
+  mutate(Cum.Pts = cumsum(G.Pt) , n = 1:length(Cum.Pts)) %>% group_by(Season , team) %>% 
+  summarise(half.Pts = Cum.Pts[max(n)/2] , full.Pts = Cum.Pts[max(n)], Goaldif = sum(GD)) %>% group_by(Season) %>% 
+  arrange(Season , -full.Pts , -Goaldif ) %>%  summarise(champion = team[1]) -> temp2
+
+
+percent <- sum(temp1$half.champion == temp2$champion)/nrow(temp1)
+
+sprintf("In the %f percent of seasons the champion of the half season is the champion of the season" , 100*percent)
+```
+
+# Problem 4
+
+The big teams of laliga from 2001 to 2010 are Real Madrid, FC Barcelona and Valencia CF. The so called black cats teams for each big team are selected from teams other than the big teams. The black cat teams are measured by the percents of the games a big team has lost against their black cat and the black cat teams are considered to be in the first division for more than 3 seasons between 2001 to 2010.
+
+
+```{r, message=FALSE, warning=FALSE}
+
+teams = c("Real Madrid" , "FC Barcelona" , "Valencia CF")
+
+laliga %>% filter(Season > 2000 & Season < 2011 , team %in% teams , !opp %in%teams ) %>% mutate( lost = (GD < 0)) %>% 
+  group_by(team, opp) %>% filter(n() > 6) %>% group_by(team, opp) %>% 
+  summarise(loss.percent = sum(lost)/length(lost)) %>% group_by(team) %>%  
+  summarise(Black.cat =opp[which.max(loss.percent)] , Loss.Percent = loss.percent[which.max(loss.percent)]) ->temp
+  myt <- ttheme_default(
+  core = list(fg_params=list(hjust = 1, x=1),
+              bg_params=list(fill=blues9[1:3])),
+  colhead = list(fg_params=list(col=blues9[8]),
+                 bg_params=list(fill="white"))
+  )
+  grid.table(temp , theme =myt)
+```
+
+
+# Problem 5
+
+This is the code for finding the teams with the earliest championship
+
+```{r, message=FALSE, warning=FALSE}
+
+laliga %>% mutate( G.Pt = 3*(GD > 0) + (GD == 0)) %>% group_by(Season,team) %>%
+  mutate(Cum.Pts = cumsum(G.Pt) , n = 1:length(Cum.Pts)) %>% group_by(Season) %>% mutate(maxgames = max(n)) %>% 
+  group_by(Season,n,maxgames) %>% arrange(-Cum.Pts) %>% group_by(Season,n,maxgames) %>%
+  summarise( first.point  = Cum.Pts[1] , second.point = Cum.Pts[2] , team = team[which.max(Cum.Pts)]) %>% 
+  mutate(diff = 3*(maxgames - n) - ( first.point - second.point)) %>% filter(diff < 0) %>% 
+  group_by(Season) %>% top_n(1, diff) %>% mutate(weeks = maxgames - n) %>% filter(weeks == max(.$weeks)) %>% 
+  select(Season , team , weeks) -> temp
+
+myt <- ttheme_default(
+  core = list(fg_params=list(hjust = 1, x=1),
+              bg_params=list(fill=blues9[1:nrow(temp)])),
+  colhead = list(fg_params=list(col=blues9[8]),
+                 bg_params=list(fill="white"))
+)
+grid.table(temp , theme =myt)
+```
+
+The most powerful championship is defined by the maximum points a team has got during a season.
+
+```{r, message=FALSE, warning=FALSE}
+
+
+laliga %>% group_by(Season,team) %>% summarise( Pts = 3*sum(GD > 0) + sum(GD == 0) , Goaldif = sum(GD)) %>% 
+  group_by(Season) %>% top_n(2, Pts)  %>% arrange(Season , -Pts ) %>% group_by(Season) %>%
+  summarise(champion = team[which.max(Pts)] , Pts = max(Pts) , GoalDif = Goaldif[which.max(Pts)] ) %>% 
+  filter(Pts == max(Pts))  -> temp
+myt <- ttheme_default(
+  core = list(fg_params=list(hjust = 1, x=1),
+              bg_params=list(fill=blues9[1:nrow(temp)])),
+  colhead = list(fg_params=list(col=blues9[8]),
+                 bg_params=list(fill="white"))
+)
+grid.table(temp , theme =myt)
+```
+
+
+#Problem 6
+
+This is the code the longest win, defeat and draw streaks in all the matches (not only one season).
+
+```{r, message=FALSE, warning=FALSE}
+laliga %>% mutate( wdl = as.double(GD > 0) - as.double(GD < 0)) %>% group_by(team) %>% 
+  do(data.frame(rle(.$wdl)[1],rle(.$wdl)[2])) %>% filter(values == 1) %>%  group_by(team) %>% 
+  summarise(Longest.win.streak = max(lengths)) %>% filter(Longest.win.streak == max(Longest.win.streak)) -> temp
+myt <- ttheme_default(
+  core = list(fg_params=list(hjust = 1, x=1),
+              bg_params=list(fill=blues9[1:nrow(temp)])),
+  colhead = list(fg_params=list(col=blues9[8]),
+                 bg_params=list(fill="white"))
+)
+grid.table(temp , theme =myt)
+
+```
+
+```{r, message=FALSE, warning=FALSE}
+
+
+
+laliga %>% mutate( wdl = as.double(GD > 0) - as.double(GD < 0)) %>% group_by(team) %>% 
+  do(data.frame(rle(.$wdl)[1],rle(.$wdl)[2])) %>% filter(values == -1) %>%  group_by(team) %>% 
+  summarise(Longest.loss.streak = max(lengths)) %>% filter(Longest.loss.streak == max(Longest.loss.streak)) -> temp
+myt <- ttheme_default(
+  core = list(fg_params=list(hjust = 1, x=1),
+              bg_params=list(fill=blues9[1:nrow(temp)])),
+  colhead = list(fg_params=list(col=blues9[8]),
+                 bg_params=list(fill="white"))
+)
+grid.table(temp , theme =myt)
+
+```
+
+```{r, message=FALSE, warning=FALSE}
+
+
+laliga %>% mutate( wdl = as.double(GD > 0) - as.double(GD < 0)) %>% group_by(team) %>% 
+  do(data.frame(rle(.$wdl)[1],rle(.$wdl)[2])) %>% filter(values == 0) %>%  group_by(team) %>% 
+  summarise(Longest.draw.streak = max(lengths)) %>% filter(Longest.draw.streak == max(Longest.draw.streak)) -> temp
+myt <- ttheme_default(
+  core = list(fg_params=list(hjust = 1, x=1),
+              bg_params=list(fill=blues9[1:nrow(temp)])),
+  colhead = list(fg_params=list(col=blues9[8]),
+                 bg_params=list(fill="white"))
+)
+grid.table(temp , theme =myt)
+```
+
+#Problem 7
+
+This is the code for problem 7
+
+```{r, message=FALSE, warning=FALSE}
+laliga %>% mutate( G.Pt = 3*(GD > 0) + (GD == 0)) %>% group_by(Season,team) %>%
+  mutate(Cum.Pts = cumsum(G.Pt) , n = 1:length(Cum.Pts), Cum.GD = cumsum(GD)) %>% group_by(Season) %>% mutate(maxgames = max(n)) %>% 
+  group_by(Season,n,maxgames) %>% arrange( Cum.Pts , - Cum.GD) %>% group_by(Season,n,maxgames) %>%
+  summarise( first.point  = Cum.Pts[4] , second.point = Cum.Pts[1] , team = team[which.min(Cum.Pts)]) %>% 
+  mutate(diff = 3*(maxgames - n) - ( first.point - second.point)) %>%  filter(diff < 0) %>% 
+  group_by(Season) %>% top_n(1, diff) %>% mutate(weeks = maxgames - n) %>% filter(weeks == max(.$weeks)) %>% 
+  select(Season , team , weeks) -> temp
+myt <- ttheme_default(
+  core = list(fg_params=list(hjust = 1, x=1),
+              bg_params=list(fill=blues9[1:nrow(temp)])),
+  colhead = list(fg_params=list(col=blues9[8]),
+                 bg_params=list(fill="white"))
+)
+
+grid.table(temp , theme = myt)
+```
+
+
+# Problem 8
+
+This is the code for problem 8
+
+```{r, message=FALSE, warning=FALSE}
+laliga %>% filter(Season == 1998) %>% mutate( G.Pt = 3*(GD > 0) + (GD == 0)) %>% group_by(team) %>%
+  mutate(Cum.Pts = cumsum(G.Pt), Cum.GD = cumsum(GD) , n = 1:length(Cum.Pts)) %>% group_by(n) %>% 
+  arrange(-Cum.Pts , -Cum.GD) %>% group_by(n) %>% mutate(rank = 1:n()) %>% 
+  select(Date,team,rank,n) %>% group_by(team) %>% arrange(n) -> temp
+temp %>% group_by(team) %>% 
+  hchart(type = "line", hcaes(x = Date, y = rank, group = team),data_labels = temp$team[1:20]) %>% 
+  hc_yAxis(title = list(text = "Rank")) %>%
+  hc_xAxis(title = list(text = "Weeks")) %>% 
+  hc_title(text = "Rank of teams through weeks") %>% 
+  hc_subtitle(text = "Laliga 1998-99 season") %>% 
+  hc_legend(align = "right", verticalAlign = "top",layout = "vertical", x = 0, y = 100)
+```
+
+
+# Problem 9
+
+This is the code for problem 9
+
+```{r, message=FALSE, warning=FALSE}
+spain %>% filter(Season == 2012) %>% mutate(Goal.Sum = hgoal+vgoal ) -> temp
+p <- ggplot(data = temp, aes(x = home, y = visitor, label = FT , color = Goal.Sum))
+p + geom_label(label.padding = unit(0.1, "lines"), 
+               abel.r = unit(0.1, "lines"),
+               check_overlap = T,
+               label.size = 0.1,  show.legend = FALSE) + 
+  theme(axis.text.x  = element_text(angle = 45, hjust = 1)) 
+```
+
+# Problem 10
+
+In this problem, some other interesting charts are plotted. 
+
+The first one is the rank of the teams with the best defense and best attack at the end of each season.
+
+```{r, message=FALSE, warning=FALSE}
+laliga %>%  mutate( G.Pt = 3*(GD > 0) + (GD == 0)) %>% group_by(Season,team) %>%
+  summarise(Pts = sum(G.Pt), GL = sum(GA), GD = sum(GD)) %>% group_by(Season) %>% 
+  arrange(-Pts , -GD) %>% group_by(Season) %>% mutate(rank = 1:n()) %>% group_by(Season) %>% arrange(GL) %>% 
+  group_by(Season) %>% summarise(rank = rank[1] , g = 'Best Defence') -> temp1
+laliga %>%  mutate( G.Pt = 3*(GD > 0) + (GD == 0)) %>% group_by(Season,team) %>%
+  summarise(Pts = sum(G.Pt), GL = sum(GF), GD = sum(GD)) %>% group_by(Season) %>% 
+  arrange(-Pts , -GD) %>% group_by(Season) %>% mutate(rank = 1:n()) %>% group_by(Season) %>% arrange(-GL) %>% 
+  group_by(Season) %>% summarise(rank = rank[1],g = 'Best Attack') ->temp2
+temp <- rbind(temp1,temp2)
+
+temp %>% group_by(g) %>% 
+  hchart(type = "line", hcaes(x = Season , y = rank, group = g))%>% 
+  hc_yAxis(title = list(text = "Rank")) %>%
+  hc_xAxis(title = list(text = "Seasons")) %>% 
+  hc_title(text = "Rank of teams through Seasons") %>% 
+  hc_subtitle(text = "Best Defence VS Best Attack") %>% 
+  hc_legend(align = "right", verticalAlign = "top",layout = "vertical", x = 0, y = 100)
+```
+
+As you can see good attack is more effective than good defence in finishing in a better rank in the end of 
+Season in Laliga
+
+
+The second chart is the rank of the Spanish giant, Real Madrid and FC Barcelona, for each season
+
+```{r, message=FALSE, warning=FALSE}
+laliga %>%  mutate( G.Pt = 3*(GD > 0) + (GD == 0)) %>% group_by(Season,team) %>%
+  summarise(Pts = sum(G.Pt), GD = sum(GD)) %>% group_by(Season) %>% 
+  arrange(-Pts , -GD) %>% group_by(Season) %>% mutate(rank = 1:n()) %>% filter(team == "Real Madrid") %>% 
+  group_by(Season) %>% summarise(rank = rank , team = team) -> temp1
+
+laliga %>%  mutate( G.Pt = 3*(GD > 0) + (GD == 0)) %>% group_by(Season,team) %>%
+  summarise(Pts = sum(G.Pt), GD = sum(GD)) %>% group_by(Season) %>% 
+  arrange(-Pts , -GD) %>% group_by(Season) %>% mutate(rank = 1:n()) %>% filter(team == "FC Barcelona") %>% 
+  group_by(Season) %>% summarise(rank = rank , team = team) -> temp2
+temp <- rbind(temp1,temp2)
+
+temp %>% group_by(team) %>% 
+  hchart(type = "line", hcaes(x = Season , y = rank, group = team))%>% 
+  hc_yAxis(title = list(text = "Rank")) %>%
+  hc_xAxis(title = list(text = "Seasons")) %>% 
+  hc_title(text = "Rank of teams through Seasons") %>% 
+  hc_subtitle(text = "Real Madrid Vs Barcelona") %>% 
+  hc_legend(align = "right", verticalAlign = "top",layout = "vertical", x = 0, y = 100)
+```
+
+
+As you can see, Real Madrid performance has been better than FC Barcelona during the Laliga history.
+
+In the next chart some information about the Elclassico is provided.
+
+```{r, message=FALSE, warning=FALSE}
+laliga %>% filter(team == "Real Madrid" , opp == "FC Barcelona") %>% mutate( G.Pt = 3*(GD > 0) + (GD == 0)) %>%
+  group_by(G.Pt) %>% summarise( a = n() ) -> temp1
+temp1$G.Pt = c("FC Barcelona wins" , "Draw", "Ream Madrid wins")
+
+laliga %>% filter(team == "Real Madrid" , opp == "FC Barcelona") %>% 
+  summarise(Real.Madrid.Goals = sum(GF) , Barcelona.Goals = sum(GA)) %>% t() -> temp2
+temp2 = as.numeric(temp2/sum(temp2))
+
+hchart(temp1,type = "column" , hcaes(x = G.Pt , y = a )) %>% 
+  hc_yAxis(title = list(text = "Games")) %>%
+  hc_xAxis(title = list(text = "Result")) %>% 
+  hc_title(text = "El classico!")%>% 
+  hc_add_series_labels_values(c("Real Madrid Goals" , "FC Barcelona Goals")  , temp2 ,
+                              type = "pie",name = "Bar", colorByPoint = TRUE, center = c('35%', '10%'),
+                              size = 100,dataLabels = list(enabled = FALSE))
+```
+
+As you can see, Real Madrid have had a better performance than FC Barcelona in Elclassico.
+
+The last chart is the goals scored per points for each team in Laliga 2011-12 season. This is useful measure for showing the effort of each team for every point that the team has gotten.
+
+```{r, message=FALSE, warning=FALSE}
+laliga %>% filter(Season == 2011) %>% mutate( G.Pt = 3*(GD > 0) + (GD == 0)) %>% group_by(team) %>%
+  summarise(Pts = sum(G.Pt), GD = sum(GF)) %>%  mutate( average = GD/Pts) %>% arrange(average) %>% 
+  select(team, average) %>%   hchart(type = "column" , hcaes(x = team , y = average)) %>% 
+  hc_yAxis(title = list(text = "Average")) %>%
+  hc_xAxis(title = list(text = "Teams")) %>% 
+  hc_title(text = "Goals Scored Per Points") %>% 
+  hc_subtitle(text = "Laliga 2011-2012 Season") 
+
+```
+
+# ggplots
+
+The plot of the questions that has been ploted by hicharter are ploted here to keep the report clean.
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+
+laliga %>% group_by(Season,team) %>% summarise( Pts = 3*sum(GD > 0) + sum(GD == 0) , Goaldif = sum(GD)) %>% 
+  group_by(Season) %>% arrange(Season , -Pts , -Goaldif )  %>% group_by(Season) %>% 
+  summarise(champion = team[1]) %>% group_by(champion) %>% 
+  summarise( Number.of.championship = n()) %>%  arrange( - Number.of.championship) -> temp
+  temp$champion = factor(temp$champion , levels = temp$champion)
+  ggplot(temp,aes(x = as.factor(champion), y = Number.of.championship)) + 
+  geom_bar(stat = "identity") +
+  theme_wsj(base_size = 6) +  theme(axis.text.x = element_text(angle=65, hjust=1)) +
+  ggtitle("Problem 1")
+  
+laliga %>% mutate(score = (GA + GF)/2) %>% group_by(team) %>% summarise(borring = mean(score)) %>% 
+  arrange(borring) %>% top_n(10, -borring) ->temp
+temp$team = factor(temp$team , levels = temp$team)
+ggplot(temp,aes(x = team, y = borring)) + 
+  geom_bar(stat = "identity") +
+  theme_wsj(base_size = 6) +  theme(axis.text.x = element_text(angle=65, hjust=1)) +
+  ggtitle("Problem 2")
+
+
+laliga %>% filter(Season == 1998) %>% mutate( G.Pt = 3*(GD > 0) + (GD == 0)) %>% group_by(team) %>%
+  mutate(Cum.Pts = cumsum(G.Pt), Cum.GD = cumsum(GD) , n = 1:length(Cum.Pts)) %>% group_by(n) %>% 
+  arrange(-Cum.Pts , -Cum.GD) %>% group_by(n) %>% mutate(rank = 1:n()) %>% 
+  select(Date,team,rank,n) %>% group_by(team) %>% arrange(n) %>% mutate(rank = 21 - rank)-> temp
+temp %>% group_by(team) %>%  ggplot(aes(x = Date, y = rank , group = team , colour = team)) + geom_line() +
+  theme_pander() + ggtitle("Problem 8")
+
+laliga %>%  mutate( G.Pt = 3*(GD > 0) + (GD == 0)) %>% group_by(Season,team) %>%
+  summarise(Pts = sum(G.Pt), GL = sum(GA), GD = sum(GD)) %>% group_by(Season) %>% 
+  arrange(-Pts , -GD) %>% group_by(Season) %>% mutate(rank = 1:n()) %>% group_by(Season) %>% arrange(GL) %>% 
+  group_by(Season) %>% summarise(rank = rank[1] , team = 'Best Defence') -> temp1
+laliga %>%  mutate( G.Pt = 3*(GD > 0) + (GD == 0)) %>% group_by(Season,team) %>%
+  summarise(Pts = sum(G.Pt), GL = sum(GF), GD = sum(GD)) %>% group_by(Season) %>% 
+  arrange(-Pts , -GD) %>% group_by(Season) %>% mutate(rank = 1:n()) %>% group_by(Season) %>% arrange(-GL) %>% 
+  group_by(Season) %>% summarise(rank = rank[1], team = 'Best Attack') ->temp2
+temp <- rbind(temp1,temp2)
+
+temp %>% group_by(team) %>% ggplot(aes(x = Season, y = rank , group = team , colour = team)) + geom_line() +
+  theme_hc() + ggtitle("Problem 10")
+
+laliga %>%  mutate( G.Pt = 3*(GD > 0) + (GD == 0)) %>% group_by(Season,team) %>%
+  summarise(Pts = sum(G.Pt), GD = sum(GD)) %>% group_by(Season) %>% 
+  arrange(-Pts , -GD) %>% group_by(Season) %>% mutate(rank = 1:n()) %>% filter(team == "Real Madrid") %>% 
+  group_by(Season) %>% summarise(rank = rank , team = team) -> temp1
+
+laliga %>%  mutate( G.Pt = 3*(GD > 0) + (GD == 0)) %>% group_by(Season,team) %>%
+  summarise(Pts = sum(G.Pt), GD = sum(GD)) %>% group_by(Season) %>% 
+  arrange(-Pts , -GD) %>% group_by(Season) %>% mutate(rank = 1:n()) %>% filter(team == "FC Barcelona") %>% 
+  group_by(Season) %>% summarise(rank = rank , team = team) -> temp2
+temp <- rbind(temp1,temp2)
+
+temp %>% group_by(team) %>% ggplot(aes(x = Season, y = rank , group = team , colour = team)) + geom_line() +
+  theme_hc() + ggtitle("Problem 10")
+
+
+laliga %>% filter(team == "Real Madrid" , opp == "FC Barcelona") %>% mutate( G.Pt = 3*(GD > 0) + (GD == 0)) %>%
+  group_by(G.Pt) %>% summarise( Games = n() ) -> temp
+temp$G.Pt = c("FC Barcelona wins" , "Draw", "Ream Madrid wins")
+
+ggplot(temp,aes(x = G.Pt, y = Games)) + 
+  geom_bar(stat = "identity") +
+  theme_wsj(base_size = 6) +
+  theme(axis.text.x = element_text(angle=65, hjust=1)) +ggtitle("Problem 10")
+
+laliga %>% filter(Season == 2011) %>% mutate( G.Pt = 3*(GD > 0) + (GD == 0)) %>% group_by(team) %>%
+  summarise(Pts = sum(G.Pt), GD = sum(GF)) %>%  mutate( average = GD/Pts) %>% arrange(average) %>% 
+  select(team, average) -> temp
+
+temp$team = factor(temp$team , levels = temp$team)
+ggplot(temp,aes(x = team, y = average)) + 
+  geom_bar(stat = "identity") +
+  theme_wsj(base_size = 6)+
+  theme(axis.text.x = element_text(angle=65, hjust=1)) + ggtitle("Problem 10")
+
+```
+
+
+

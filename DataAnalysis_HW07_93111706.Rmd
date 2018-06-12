@@ -1,0 +1,488 @@
+---
+title: "Seventh Week: Generalized Linear Models"
+subtitle: "Murder or suicide"
+author: "Sina Alemohammad 93111706"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+<div align="center">
+<img  src="images/giraffe-suicide-fail-cartoon.jpg"  align = 'center'>
+</div>
+
+## Introduction
+
+These are the libraries used in this study.
+
+```{r, message=FALSE, warning=FALSE , fig.align="center"}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(highcharter)
+library(pheatmap)
+library(Hmisc)
+library(GGally)
+library(h2o)
+library(onehot)
+library(car)
+library(statmod)
+library(data.table)
+library(caret)
+library(ROCR)
+library(grid)
+library(scales)
+library(gridExtra)
+library(tidyr)
+library(e1071)
+library(ggthemes)
+```
+
+```{r message=FALSE, warning=FALSE, include=FALSE, paged.print=FALSE}
+h2o.init()
+```
+
+## Problem1
+
+The unnecessary data is removed and the correlation matrix is plotted.
+To deal with the categorical nature of the features, I used the onehot package to convert each categorical features with n category to n new vector of binary features. In this case we can work with this numbers to build our models.
+Because of huge data samples, The plotting the paired scatter plot take too much time (about 30 minutes),so I have commented the line for plotting it and I have uploaded the image of paired scatter plot.    
+
+```{r ,  message=FALSE, warning=FALSE , fig.align="center" }
+setwd("C:/Users/Sina Alemohammad/Desktop/Data Analysis/HW7/hw_07/data") 
+
+x  = read_csv("murder_suicide.csv")
+x %>% filter(EducationReportingFlag==1) %>% 
+              select(MannerOfDeath, ResidentStatus,
+                     Education=Education2003Revision, Sex, Age=AgeRecode12,
+                     PlaceOfDeathAndDecedentsStatus, MaritalStatus,
+                     DayOfWeekOfDeath, InjuryAtWork, MonthOfDeath,
+                     MethodOfDisposition, Autopsy, ActivityCode,
+                     PlaceOfInjury, Icd10Code, Race) %>%
+              filter(Education!=9, Age!=12, PlaceOfDeathAndDecedentsStatus!=9,
+                     MaritalStatus!="U", DayOfWeekOfDeath!=9,
+                     InjuryAtWork!="U", Autopsy!="U", ActivityCode!=99,
+                     PlaceOfInjury!=9, PlaceOfInjury!=99,
+                     MethodOfDisposition %in% c("B", "C", "O")) %>%
+              mutate(death=substr(Icd10Code,1,1)) %>% 
+              select(-Icd10Code) -> data.gg
+data <- as.data.frame(sapply(data.gg,as.factor))
+
+
+encoder = onehot(data , stringsAsFactors = TRUE , max_levels = 300)
+data.one.hot = as.data.frame(predict(encoder,data))
+
+data.one.hot %>% cor() %>% hchart  
+
+my_fn <- function(data, mapping, ...){
+  p <- ggplot(data = data, mapping = mapping) + 
+    geom_point() + 
+    geom_smooth(method=loess, fill="red", color="red", ...) +
+    geom_smooth(method=lm, fill="blue", color="blue", ...)
+  p
+}
+
+#ggpairs(data.gg[,1:16], lower = list(continuous = my_fn) , cardinality_threshold = 80)
+
+````
+
+
+<div align="center">
+<img  src="images/problem1.jpg"  align = 'center'>
+</div>
+
+## Problem2
+
+I have used the kruskal test for finding the effects of each of the Sex,Race,Education,Method of disposition and Age on the manner of death(suicide of murdered). All of the mentioned features null hypothesis is rejected based on the kruskal test. For example, It means that the level of education effects the chance of being killed or murdered and so on.
+
+```{r , message=FALSE, warning=FALSE , fig.align="center" }
+data %>% 
+  select(Sex, Race, Education, Age, MethodOfDisposition,
+        MannerOfDeath) -> data3
+kruskal.test(formula = MannerOfDeath ~ Sex, data = data3)
+kruskal.test(formula = MannerOfDeath ~ Race, data = data3)
+kruskal.test(formula = MannerOfDeath ~ Education, data = data3)
+kruskal.test(formula = MannerOfDeath ~ MethodOfDisposition,data = data3)
+kruskal.test(formula = MannerOfDeath ~ Age, data = data3)
+
+```
+
+## Problem3
+
+
+I used all of the features at first, then I removed the features coefficients with low P_value. 
+You can see the P_value of the last model, mylogit2, are all significant 
+
+```{r ,  message=FALSE, warning=FALSE , fig.align="center" }
+mylogit = glm(data =data.one.hot,
+             formula = `MannerOfDeath=2` ~ 
+               `ResidentStatus=1` + `ResidentStatus=2` +
+               `ResidentStatus=3` + `Sex=F` + `Education=1` +
+               `Education=2` + `Education=3` + `Education=4` + 
+               `Education=5` + `Education=6` + `Education=7` +
+               `Age=1` + `Age=2` + `Age=3` + `Age=4` + 
+               `Age=5` + `Age=6` + `Age=7` + `Age=8` +
+               `Age=9` + `Age=10` +
+               `PlaceOfDeathAndDecedentsStatus=1` +
+               `PlaceOfDeathAndDecedentsStatus=2` +
+               `PlaceOfDeathAndDecedentsStatus=3` +
+               `PlaceOfDeathAndDecedentsStatus=4` +
+               `PlaceOfDeathAndDecedentsStatus=5` +
+               `PlaceOfDeathAndDecedentsStatus=6` +
+               `MaritalStatus=D` + `MaritalStatus=M` +
+               `MaritalStatus=S` + `DayOfWeekOfDeath=1` +
+               `DayOfWeekOfDeath=2` + `DayOfWeekOfDeath=3` +
+               `DayOfWeekOfDeath=4` + `DayOfWeekOfDeath=5` +
+               `DayOfWeekOfDeath=6` + `InjuryAtWork=N` +
+               `MonthOfDeath=1` + `MonthOfDeath=2` +
+               `MonthOfDeath=3` + `MonthOfDeath=4` +
+               `MonthOfDeath=5` + `MonthOfDeath=6` +
+               `MonthOfDeath=7` + `MonthOfDeath=8` +
+               `MonthOfDeath=9` + `MonthOfDeath=10` + 
+               `MonthOfDeath=11` + `MethodOfDisposition=B` +
+               `MethodOfDisposition=C` + `Autopsy=N` +
+               `ActivityCode=0` + `ActivityCode=1` +
+               `ActivityCode=4` + `ActivityCode=8` +
+               `PlaceOfInjury=0` + `PlaceOfInjury=1` +
+               `PlaceOfInjury=2` + `PlaceOfInjury=3` +
+               `PlaceOfInjury=4` + `PlaceOfInjury=5` +
+               `PlaceOfInjury=6` + `PlaceOfInjury=7` +
+               `Race=1` + `Race=2` + `Race=3` + `Race=4` +
+               `Race=5` + `Race=6` + `Race=7` + `Race=18` +
+               `Race=28` + `Race=38` + `Race=48` + `Race=58` +
+               `Race=68` + `death=C` + `death=F` + `death=K` +
+               `death=V` + `death=W` + `death=X`,
+               family = binomial(link = 'logit'))
+
+
+summary(mylogit)
+
+
+mylogit2 = glm(data =data.one.hot,
+             formula = `MannerOfDeath=2` ~ 
+               `Sex=F` + `Education=1` +
+               `Education=2` + `Education=3` + `Education=4` + 
+               `Education=5` +  `Age=3` +  
+               `Age=5` + `Age=6` + `Age=8` +
+               `PlaceOfDeathAndDecedentsStatus=1` +
+               `PlaceOfDeathAndDecedentsStatus=2` +
+               `PlaceOfDeathAndDecedentsStatus=4` +
+               `PlaceOfDeathAndDecedentsStatus=6` +
+               `MaritalStatus=M` +
+               `DayOfWeekOfDeath=2` + `DayOfWeekOfDeath=3` +
+               `DayOfWeekOfDeath=4` + `DayOfWeekOfDeath=5` +
+               `DayOfWeekOfDeath=6` + `InjuryAtWork=N` +
+               `MonthOfDeath=2` +
+               `MonthOfDeath=4` +
+               `MonthOfDeath=8` +
+               `MethodOfDisposition=C` + `Autopsy=N` +
+               `PlaceOfInjury=1` +
+               `PlaceOfInjury=4` + `PlaceOfInjury=5` +
+               `PlaceOfInjury=6` + 
+               `Race=2` + `Race=3`,
+               family = binomial(link = 'logit'))
+
+summary(mylogit2)
+
+```
+
+## Problem4
+
+I have used 4 plots to compare predicted values to the actual values. 
+
+1. The density plot of the predicted values based on their true values
+2. The confusion matrix plot of the predicted values with cutoff 0.5
+3. The Pearson residual plot of prediction values
+4. The Effects of sex on the prediction
+
+
+```{r ,  message=FALSE, warning=FALSE , fig.align="center" }
+prediction = predict(mylogit2 , data.one.hot , type="response")
+
+data.temp = cbind(data.one.hot,prediction)
+
+temp = (data.temp$`MannerOfDeath=2` == 1)
+p1 = prediction[temp]
+p2 = prediction[!temp]
+
+hchart(density(p1), type = "area", color = "#B71C1C", name = "Positive") %>% 
+  hc_add_series(density(p2) , type = "area" , name = "negetive")
+
+
+table(data.temp$`MannerOfDeath=2` ,ifelse(fitted(mylogit2)>0.5,1,0)) %>% plot()
+
+
+residualPlots(mylogit2)
+
+
+
+logmod = glm(`MannerOfDeath=2` ~ `Sex=F` , data = data.one.hot , family = binomial(link = 'logit'))
+apply = data.one.hot %>% mutate(preds = predict(logmod, type = 'response'))
+ggplot(data = apply, aes(x = `Sex=F`, y = `MannerOfDeath=2` )) + geom_point() + 
+    geom_line(aes(x = `Sex=F`, y = preds), color = 'red', size = 0.3)
+
+
+
+```
+
+## Problem5
+
+80 of data (35668 samples) are used fot the traing set and the others are used for the test set.
+
+```{r ,  message=FALSE, warning=FALSE , fig.align="center" }
+
+temp = (1:44585 %in% sample(1:44585 , 35668 , replace = F))
+
+train = data.one.hot[temp,]
+test = data.one.hot[!temp,]
+
+
+mylogit3 = glm(data = train,
+             formula = `MannerOfDeath=2` ~ 
+               `Sex=F` + `Education=1` +
+               `Education=2` + `Education=3` + `Education=4` + 
+               `Education=5` +  `Age=3` +  
+               `Age=5` + `Age=6` + `Age=8` +
+               `PlaceOfDeathAndDecedentsStatus=1` +
+               `PlaceOfDeathAndDecedentsStatus=2` +
+               `PlaceOfDeathAndDecedentsStatus=4` +
+               `PlaceOfDeathAndDecedentsStatus=6` +
+               `MaritalStatus=M` +
+               `DayOfWeekOfDeath=2` + `DayOfWeekOfDeath=3` +
+               `DayOfWeekOfDeath=4` + `DayOfWeekOfDeath=5` +
+               `DayOfWeekOfDeath=6` + `InjuryAtWork=N` +
+               `MonthOfDeath=2` +
+               `MonthOfDeath=4` +
+               `MonthOfDeath=8` +
+               `MethodOfDisposition=C` + `Autopsy=N` +
+               `PlaceOfInjury=1` +
+               `PlaceOfInjury=4` + `PlaceOfInjury=5` +
+               `PlaceOfInjury=6` + 
+               `Race=2` + `Race=3`,
+               family = binomial(link = 'logit'))
+
+prediction = predict(mylogit3 , test , type="response")
+
+test$prediction = prediction
+
+ConfusionMatrixInfo <- function( data, predict, actual, cutoff )
+{	
+  # extract the column ;
+  # relevel making 1 appears on the more commonly seen position in 
+  # a two by two confusion matrix	
+  predict <- data[[predict]]
+  actual  <- relevel( as.factor(data[[actual]]), "1")
+  result <- data.table( actual = actual, predict = predict )
+  
+  # caculating each pred falls into which category for the confusion matrix
+  result[ , type := ifelse( predict >= cutoff & actual == 1, "TP",
+                            ifelse( predict >= cutoff & actual == 0, "FP", 
+                                    ifelse( predict <  cutoff & actual == 1, "FN", "TN" ) ) ) %>% as.factor() ]
+  
+  # jittering : can spread the points along the x axis 
+  plot <- ggplot( result, aes( actual, predict, color = type ) ) + 
+    geom_violin( fill = "white", color = NA ) +
+    geom_jitter( shape = 1 , alpha = 0.2) + 
+    geom_hline( yintercept = cutoff, color = "blue", alpha = 0.6 ) + 
+    scale_y_continuous( limits = c( 0, 1 ) ) + 
+    scale_color_discrete( breaks = c( "TP", "FN", "FP", "TN" ) ) + # ordering of the legend 
+    guides( col = guide_legend( nrow = 2 ) ) + # adjust the legend to have two rows  
+    ggtitle( sprintf( "Confusion Matrix with Cutoff at %.2f", cutoff ) )
+  
+  return( list( data = result, plot = plot ) )
+}
+
+
+cm_info = ConfusionMatrixInfo( data = test, predict = "prediction", 
+                                actual = "MannerOfDeath=2", cutoff = .5 )
+cm_info$plot
+type = cm_info$data
+
+n = nrow(test)
+TP = sum(type$type == "TP")
+TN = sum(type$type == "TN")
+FP = sum(type$type == "FP")
+FN = sum(type$type == "FN")
+P = TP + FP
+N = TN + FN 
+ACC = (TP+TN)/n
+FPR = FP/N
+TPR = TP/N
+
+
+sprintf("P = %i , N = %i, TP = %i , TN = %i, FP = %i, FN = %i,ACC = %f,FPR = %f , TPR = %f", P,N,TP,TN,FP,FN,ACC,FPR,TPR )
+
+
+```
+
+## Problem6
+
+The best accuracy is chosen based on the best accuracy on the best accuracy on test data. 
+
+
+```{r , message=FALSE, warning=FALSE , fig.align="center" }
+
+prediction = predict(mylogit3 , train , type="response")
+
+train$prediction = prediction
+
+AccuracyCutoffInfo <- function( train, test, predict, actual )
+{
+  # change the cutoff value's range as you please 
+  cutoff <- seq( .25, .75, by = .01 )
+
+  
+  accuracy <- lapply( cutoff, function(c)
+  {
+    r1= as.factor( train[[predict]] > c )
+    levels(r1) = c("0","1")
+    r2= as.factor( test[[predict]] > c )
+    levels(r2) = c("0","1")
+    # use the confusionMatrix from the caret package
+    cm_train <- confusionMatrix(r1, as.factor(train[[actual]]) )
+    cm_test  <- confusionMatrix(r2, as.factor(test[[actual]])  )
+    
+    dt <- data.table( cutoff = c,
+                      train  = cm_train$overall[["Accuracy"]],
+                      test   = cm_test$overall[["Accuracy"]] )
+    return(dt)
+  }) %>% rbindlist()
+  
+  # visualize the accuracy of the train and test set for different cutoff value 
+  # accuracy in percentage.
+  accuracy_long <- gather( accuracy, "data", "accuracy", -1 )
+  
+  plot <- ggplot( accuracy_long, aes( cutoff, accuracy, group = data, color = data ) ) + 
+    geom_line( size = 1 ) + geom_point( size = 3 ) +
+    scale_y_continuous( label = percent ) +
+    ggtitle( "Train/Test Accuracy for Different Cutoff" )
+  
+  return( list( data = accuracy, plot = plot ) )
+}
+
+accuracy_info = AccuracyCutoffInfo( train = train, test = test, 
+                                     predict = "prediction", actual = "MannerOfDeath=2" )
+accuracy_info$plot
+accuracy_info$data %>% mutate(all = test) -> cutoffacc
+m =  max(cutoffacc$all)
+i = which(cutoffacc$all == m)
+Bestcutoff = cutoffacc$cutoff[i]
+
+sprintf("The best cut of is %f with accuracy = %f" , Bestcutoff , m)
+
+```
+
+## Problem7
+
+I have set the FN cost twice the FP cost, because we don't want to have murder cases that to be determined as suicide.  
+
+```{r ,  message=FALSE, warning=FALSE , fig.align="center" }
+
+ROCInfo <- function( data, predict, actual, cost.fp, cost.fn )
+{
+  # calculate the values using the ROCR library
+  # true positive, false postive 
+  pred <- prediction( data[[predict]], data[[actual]] )
+  perf <- performance( pred, "tpr", "fpr" )
+  roc_dt <- data.frame( fpr = perf@x.values[[1]], tpr = perf@y.values[[1]] )
+  
+  # cost with the specified false positive and false negative cost 
+  # false postive rate * number of negative instances * false positive cost + 
+  # false negative rate * number of positive instances * false negative cost
+  cost <- perf@x.values[[1]] * cost.fp * sum( data[[actual]] == 0 ) + 
+    ( 1 - perf@y.values[[1]] ) * cost.fn * sum( data[[actual]] == 1 )
+  
+  cost_dt <- data.frame( cutoff = pred@cutoffs[[1]], cost = cost )
+  
+  # optimal cutoff value, and the corresponding true positive and false positive rate
+  best_index  <- which.min(cost)
+  best_cost   <- cost_dt[ best_index, "cost" ]
+  best_tpr    <- roc_dt[ best_index, "tpr" ]
+  best_fpr    <- roc_dt[ best_index, "fpr" ]
+  best_cutoff <- pred@cutoffs[[1]][ best_index ]
+  
+  # area under the curve
+  auc <- performance( pred, "auc" )@y.values[[1]]
+  
+  # normalize the cost to assign colors to 1
+  normalize <- function(v) ( v - min(v) ) / diff( range(v) )
+  
+  # create color from a palette to assign to the 100 generated threshold between 0 ~ 1
+  # then normalize each cost and assign colors to it, the higher the blacker
+  # don't times it by 100, there will be 0 in the vector
+  col_ramp <- colorRampPalette( c( "green", "orange", "red", "black" ) )(100)   
+  col_by_cost <- col_ramp[ ceiling( normalize(cost) * 99 ) + 1 ]
+  
+  roc_plot <- ggplot( roc_dt, aes( fpr, tpr ) ) + 
+    geom_line( color = rgb( 0, 0, 1, alpha = 0.3 ) ) +
+    geom_point( color = col_by_cost, size = 4, alpha = 0.2 ) + 
+    geom_segment( aes( x = 0, y = 0, xend = 1, yend = 1 ), alpha = 0.8, color = "royalblue" ) + 
+    labs( title = "ROC", x = "False Postive Rate", y = "True Positive Rate" ) +
+    geom_hline( yintercept = best_tpr, alpha = 0.8, linetype = "dashed", color = "steelblue4" ) +
+    geom_vline( xintercept = best_fpr, alpha = 0.8, linetype = "dashed", color = "steelblue4" )				
+  
+  cost_plot <- ggplot( cost_dt, aes( cutoff, cost ) ) +
+    geom_line( color = "blue", alpha = 0.5 ) +
+    geom_point( color = col_by_cost, size = 4, alpha = 0.5 ) +
+    ggtitle( "Cost" ) +
+    scale_y_continuous( labels = comma ) +
+    geom_vline( xintercept = best_cutoff, alpha = 0.8, linetype = "dashed", color = "steelblue4" )	
+  
+  # the main title for the two arranged plot
+  sub_title <- sprintf( "Cutoff at %f - Total Cost = %f, AUC = %f", 
+                        best_cutoff, best_cost, auc )
+  
+  # arranged into a side by side plot
+  plot <- arrangeGrob( roc_plot, cost_plot, ncol = 2, 
+                       top = textGrob( sub_title, gp = gpar( fontsize = 16, fontface = "bold" ) ) )
+  
+  return( list( plot 		  = plot, 
+                cutoff 	  = best_cutoff, 
+                totalcost   = best_cost, 
+                auc         = auc,
+                sensitivity = best_tpr, 
+                specificity = 1 - best_fpr ) )
+}
+
+
+
+cost_fp = 100 ;cost_fn = 200
+roc_info = ROCInfo( data = cm_info$data , predict = "predict", 
+                     actual = "actual", cost.fp = cost_fp, cost.fn = cost_fn )
+grid.draw(roc_info$plot)
+
+```
+
+## Problem8
+
+The model accuracy mean in 5 folds is about 89 percents, 2 percents more that my model. More details about the h2o model can be found at the summary
+
+
+```{r , message=FALSE, warning=FALSE , fig.align="center"}
+happly = as.h2o(data.one.hot)
+
+names = colnames(happly)
+names = names[c(-1,-2,-6,-14,-16,-27,-34,-38,-45,-47,-59,-62,-64,-69,-78,-92,-99)]
+
+
+chglm = h2o.glm(y = "MannerOfDeath=2" , x= names,
+               training_frame = happly, family="binomial", nfolds = 5)
+chglm
+
+
+
+```
+
+
+## Problem9
+
+NO! We cant do it. The accuracy of our models is about 87 for my models and 89 for h2o cluster. Its not good at all and it incorrectly bias the decisions of the judge. Even if we could build some models that could reach ACC > 99.99, I don't agree with the use of artificial intelligence in the judiciary system because the human being cant be modeled and we cant built high accuracy models and even if we could, it will not be perfect and in case of wrong prediction, it will effect the decisions of the judge.
+
+
+
+
+
+
+

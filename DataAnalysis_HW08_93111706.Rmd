@@ -1,0 +1,548 @@
+---
+title: "Eighth Week: Text Analysis in R"
+subtitle: "To be, or not to be"
+author: "Sina Alemohammad 93111706"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+<div align="center">
+<img  src="images/dickens1_1.png"  align = 'center'>
+</div>
+
+## Introduction
+
+These are the libraries used in this study.
+
+```{r, message=FALSE, warning=FALSE , fig.align="center"}
+library(dplyr)
+library(readr)
+library(stringr)
+library(gutenbergr)
+library(tidytext)
+library(ggplot2)
+library(highcharter)
+library(wordcloud2)
+library(tm)
+```
+
+## Problem1
+
+The top 20 words based on the their frequency is plotted.
+
+
+```{r ,  message=FALSE, warning=FALSE , fig.align="center" }
+
+id = c(98,564,580,700,730,766,786,821,883,917,963,967,968,1023,1400)
+#gutenberg_download( id ) -> books
+#write.csv(books, file = "books.csv")
+books = read_csv("books.csv") 
+gutenberg_works( gutenberg_id %in% id) %>% select(title = title) %>% unlist() -> titles
+
+
+books %>% select(text = text) %>% 
+  str_replace_all("\"", "") %>% str_to_lower() %>% removeWords(., stopwords('en')) %>% 
+  removePunctuation %>% removeNumbers() %>% 
+  str_split(pattern = "\\s") %>% unlist() %>% str_trim() %>% table() %>% 
+  as.data.frame(stringsAsFactors = F) -> wf
+colnames(wf) = c("word","count")
+wf %>% arrange(desc(count)) %>% filter(nchar(word)>3) -> wf
+wf %>% .[1:20, ] %>% hchart("bar", hcaes(x=word, y=count)) %>% 
+  hc_title(text = "Top 20 words") %>%
+  hc_subtitle(text = "In books  by Charles Dickens")
+
+````
+
+
+## Problem2
+
+
+```{r ,  message=FALSE, warning=FALSE , fig.align="center" }
+
+temp = wf[1:nrow(demoFreq),]
+rownames(temp) <- temp$word
+
+wordcloud2(temp, size = 0.45, fontFamily="Calibri",
+           figPath = "images/dickens1_1.png", color = "#922431",
+           widgetsize = c(897, 598))
+````
+
+## Problem3
+
+Top 5 names of each book by Charles Dickens is plotted.
+
+```{r ,  message=FALSE, warning=FALSE , fig.align="center" }
+FN = data.frame()
+for (i in 1:15){
+  books %>% filter( gutenberg_id == id[i]) %>% select(text = text) %>% 
+    str_replace_all("\"","") %>% 
+    removeWords(., stopwords('en')) %>% 
+    removeWords(c("Expectations","Miss","Mrs", "Ms", "Madame")) %>% 
+    removePunctuation %>% removeNumbers() %>% 
+    str_split(pattern = "\\s") %>% 
+    unlist() %>% 
+    table() %>% 
+    as.data.frame(stringsAsFactors = F) -> wstone
+  colnames(wstone) = c("word","count")
+  wstone = wstone %>%
+    filter(!str_to_lower(word) %in% stop_words$word) %>% 
+    filter(str_length(word)>1) %>% 
+    filter(!str_detect(word,"\\d")) %>%
+    arrange(desc(count)) %>% 
+    mutate(proper = !word %in% str_to_lower(word)) %>%
+    filter(proper == TRUE , nchar(word)>3) %>% 
+    arrange(desc(count)) %>% .[1:5,] %>% 
+    mutate(title = titles[i]) -> temp
+   FN = rbind(FN, temp)
+}
+FN = bind_rows(FN)
+FN %>%   hchart("column",hcaes(x =word, y = count, group = title)) %>% 
+  hc_add_theme(hc_theme_google())
+
+````
+
+## Problem4
+
+The negative and positive words of each book is shown.
+
+```{r ,  message=FALSE, warning=FALSE , fig.align="center" }
+p = list(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)
+for (i in 1:15){
+books %>% filter(gutenberg_id == id[i]) %>% select(text = text) %>% 
+  str_replace_all("\"","") %>% 
+  removeWords(., stopwords('en')) %>% 
+  removePunctuation %>% removeNumbers() %>% 
+  str_split(pattern = "\\s") %>% 
+  unlist() %>% 
+  table() %>% 
+  as.data.frame(stringsAsFactors = F) -> wf
+  colnames(wf) = c("word","count")
+  wf %>% arrange(desc(count)) %>% filter(nchar(word)>3) -> wf
+  wf %>% full_join(sentiments, by="word") %>% 
+    select(word, count, sentiment) %>% 
+    na.omit() %>% 
+    group_by(word, sentiment) %>%
+    summarise(count=max(count)) %>% 
+    arrange(desc(count)) -> sentiment.words
+  sentiment.words %>%filter(sentiment=="positive") %>% .[1:20, ] -> positive
+  sentiment.words %>% filter(sentiment=="negative") %>% .[1:20, ] -> negative
+  
+  temp = rbind(positive, negative)
+  bp<- ggplot(temp, aes(x= word, y= count, fill=sentiment)) +
+  geom_bar(width = 0.6, stat = "identity")
+  pie <- bp + coord_polar( "x" , start=0)+ggtitle(titles[i] , subtitle = "By Charles Dickens")
+  p[[i]] = pie
+}
+
+
+
+````
+
+Here are the plots.
+
+```{r echo=FALSE, fig.align="center", warning=FALSE, ,  message=FALSE}
+p[[1]]
+p[[2]]
+p[[3]]
+p[[4]]
+p[[5]]
+p[[6]]
+p[[7]]
+p[[8]]
+p[[9]]
+p[[10]]
+p[[11]]
+p[[12]]
+p[[13]]
+p[[14]]
+p[[15]]
+
+```
+
+
+## Problem5
+
+The emotional time series of LesMiserables is plotted.
+
+
+```{r ,  message=FALSE, warning=FALSE , fig.align="center" }
+#LesMiserables = gutenberg_download(135, meta_fields = "title")
+#write.csv(LesMiserables, file = "LesMiserables.csv")
+LesMiserables = read_csv("LesMiserables.csv")
+lesmis <- split(LesMiserables, rep(1:200, each=ceiling( nrow(LesMiserables)/200), length.out= nrow(LesMiserables))) 
+positive  = rep(0, 200)
+nagative  = rep(0, 200)
+for (i in 1:200){
+  
+  temp =lesmis[[i]]
+  temp %>% select(rext = text) %>%  
+   str_replace_all("\"","") %>% 
+   removeWords(., stopwords('en')) %>% 
+   removePunctuation %>% removeNumbers() %>% 
+   str_split(pattern = "\\s") %>% 
+   unlist() %>% 
+   table() %>% 
+   as.data.frame(stringsAsFactors = F) -> wf
+  colnames(wf) = c("word","count")
+  wf %>% arrange(desc(count)) %>% filter(nchar(word)>3) -> wf
+  wf %>% full_join(sentiments, by="word") %>% 
+    select(word, count, sentiment) %>% 
+    na.omit() %>% 
+    group_by(word, sentiment) %>%
+    summarise(count=max(count)) %>% 
+    arrange(desc(count)) -> sentiment.words
+  sentiment.words %>% filter(sentiment=="positive") %>%
+     .$count %>% sum() -> positive[i]
+  sentiment.words %>% filter(sentiment=="negative") %>%
+     .$count %>% sum() -> nagative[i]
+
+}
+
+highchart() %>% 
+hc_add_series(data = positive, type="spline", name="positive") %>% 
+  hc_add_series(data = nagative, type = "spline", name = "negative") %>% 
+  hc_add_theme(hc_theme_google()) %>% 
+  hc_title(text = "Emotional time serie of book") %>%
+  hc_subtitle(text = "LesMiserables by Victor Hugo") %>% 
+  hc_yAxis(text = "Frequency ")
+ 
+  
+
+
+````
+
+## Problem6
+
+It seems that there are a quiet number of French words in the LesMiserables, so I removed french and English stopping words in the second figure.
+
+
+```{r ,  message=FALSE, warning=FALSE , fig.align="center" }
+LesMiserables$text %>% 
+   str_replace_all("\"","") %>% 
+   removePunctuation() %>% 
+   str_split(pattern = "\\s") %>% 
+   unlist() %>% na.omit() -> words
+words <- words[words!=""]
+vapply(ngrams(words, 2L), paste, "", collapse = " ") %>% 
+  table()%>%  as.data.frame(stringsAsFactors = F) %>%  
+  arrange(desc(Freq)) %>% .[1:30,] -> temp.with.stop
+colnames(temp.with.stop) = c("word","count")
+temp.with.stop %>%
+  hchart("bar", hcaes(x= word, y= count)) %>% 
+  hc_add_theme(hc_theme_google()) %>% 
+  hc_title(text = "Most frequent 2-gram words") %>%
+  hc_subtitle(text = "Considering stoping words")
+
+
+LesMiserables$text %>% 
+   str_replace_all("\"","") %>% 
+   removePunctuation() %>% 
+   removeWords(., stopwords('en')) %>% 
+  removeWords(., stopwords('fr')) %>% 
+   str_split(pattern = "\\s") %>% 
+   unlist() %>% na.omit() -> words
+words <- words[words!=""]
+vapply(ngrams(words, 2L), paste, "", collapse = " ") %>% 
+  table()%>%  as.data.frame(stringsAsFactors = F) %>% 
+  arrange(desc(Freq)) %>% .[1:30,] -> temp.without.stop
+colnames(temp.without.stop) = c("word","count")
+temp.without.stop %>%
+  hchart("bar", hcaes(x=word, y=count)) %>% 
+   hc_add_theme(hc_theme_google()) %>% 
+  hc_title(text = "Most frequent 2-gram words") %>%
+  hc_subtitle(text = " After removing stoping words")
+  
+
+
+
+````
+
+
+## Problem7
+
+10 most frequent verbs men and women do in LesMiserables is plotted.
+
+
+```{r ,  message=FALSE, warning=FALSE , fig.align="center" }
+LesMiserables$text %>% 
+   str_replace_all("\"","") %>% 
+   removePunctuation() %>% 
+   str_split(pattern = "\\s") %>% 
+   unlist() %>% na.omit() -> words
+words <- words[words!=""]
+
+verb_id = which(words == "he" | words == "He" | words == "she"| words == "She")
+words[verb_id+1] %>% 
+  table()%>%  as.data.frame(stringsAsFactors = F) %>% 
+  arrange(desc(Freq)) %>% .[1:10,] -> verbs
+colnames(verbs) = c("word","count")
+verbs %>% hchart("pie", hcaes(name = word, y = count), name = "Bars") %>% 
+   hc_title(text = "10 most frequent verbs after he or she!") %>% 
+   hc_subtitle(text = "In LesMiserables by Victor Hugo")
+
+
+
+````
+
+## Problem8
+
+Because of problems in finding the chapters and the huge amount of chapters in all of the Charles Dickens books and problem in plotting it, I decided to plot the distribution, which the log of frequency of sorted words based on frequency vs log of rank, for each book. at the end the mean of the all books distribution is plotted and as you can see, the  2-gram and 1-gram distribution is different.
+
+I have also included a code that split the book into chapters, but i didnt use it.
+
+
+```{r ,  message=FALSE, warning=FALSE , fig.align="center" }
+# split by chapter
+books %>% filter(gutenberg_id == 730) %>% select(text = text)-> txt
+txt %>% 
+   str_replace_all("\"","") %>% removePunctuation() %>% 
+   paste(collapse =" ") %>% str_split(pattern = "CHAPTER") %>%
+   unlist() %>% as.data.frame(stringsAsFactors = F) -> temp
+colnames(temp) = c("chapters")
+temp %>% filter(nchar(chapters)> 1000) -> temp
+
+
+
+ct = list(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)
+rank = seq(1,5000,25)
+mean.d.1 = as.numeric(matrix(0,nrow = 1,ncol = 200))
+for (i in 1:15){
+  books %>% filter(gutenberg_id ==id[i]) %>% select(text = text)-> temp
+  n = nchar(temp)
+  temp %>% select(rext = text) %>% na.omit() %>% 
+   str_replace_all("\"","") %>% 
+   removePunctuation() %>% 
+   str_split(pattern = "\\s") %>% 
+   unlist() %>% na.omit() -> words
+words <- words[words!=""]
+vapply(ngrams(words, 1L), paste, "", collapse = " ") %>% 
+  table()%>%  as.data.frame(stringsAsFactors = F) %>% 
+  arrange(desc(Freq)) -> temp3
+  temp3 <- temp3[rank,]
+  temp3$Freq = 10000*temp3$Freq/n
+  mean.d.1 = mean.d.1 + temp3$Freq/15
+ct[[i]] = as.data.frame( cbind(temp3$Freq,rank)) 
+}
+
+highchart() %>% 
+hc_add_series(data = ct[[1]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ) , name = titles[1]) %>% 
+  hc_add_series(data = ct[[2]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[2]) %>%
+  hc_add_series(data = ct[[3]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[3]) %>%
+  hc_add_series(data = ct[[4]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[4]) %>%
+  hc_add_series(data = ct[[5]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[5]) %>%
+  hc_add_series(data = ct[[6]], type="line", hcaes(x =log(rank+1), y = log(V1+1) ), name = titles[6]) %>%
+  hc_add_series(data = ct[[7]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[7]) %>%
+  hc_add_series(data = ct[[8]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[8]) %>%
+  hc_add_series(data = ct[[9]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[9]) %>%
+  hc_add_series(data = ct[[10]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[10]) %>%
+  hc_add_series(data = ct[[1]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ) , name = titles[11]) %>% 
+  hc_add_series(data = ct[[2]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[12]) %>%
+  hc_add_series(data = ct[[3]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[13]) %>%
+  hc_add_series(data = ct[[4]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[14]) %>%
+  hc_add_series(data = ct[[5]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[15]) %>%
+  hc_title(text = "1-gram distribuation of words") %>%
+  hc_subtitle(text = "Books by Charles Dickens ") 
+
+ct = list(1,2,3,4,5,6,7,8,9,10,11,12,13,14,15)
+rank = seq(1,5000,25)
+mean.d.2 = as.numeric(matrix(0,nrow = 1,ncol = 200))
+for (i in 1:15){
+  books %>% filter(gutenberg_id ==id[i]) %>% select(text = text)-> temp
+  n = nchar(temp)
+  temp %>% select(rext = text) %>% na.omit() %>% 
+   str_replace_all("\"","") %>% 
+   removePunctuation() %>% 
+   str_split(pattern = "\\s") %>% 
+   unlist() %>% na.omit() -> words
+words <- words[words!=""]
+vapply(ngrams(words, 2L), paste, "", collapse = " ") %>% 
+  table()%>%  as.data.frame(stringsAsFactors = F) %>% 
+  arrange(desc(Freq)) -> temp3
+  temp3 <- temp3[rank,]
+  temp3$Freq = 10000*temp3$Freq/n
+  mean.d.2 = mean.d.2 + temp3$Freq/15
+ct[[i]] = as.data.frame( cbind(temp3$Freq,rank)) 
+}
+
+highchart() %>% 
+hc_add_series(data = ct[[1]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ) , name = titles[1]) %>% 
+  hc_add_series(data = ct[[2]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[2]) %>%
+  hc_add_series(data = ct[[3]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[3]) %>%
+  hc_add_series(data = ct[[4]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[4]) %>%
+  hc_add_series(data = ct[[5]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[5]) %>%
+  hc_add_series(data = ct[[6]], type="line", hcaes(x =log(rank+1), y = log(V1+1) ), name = titles[6]) %>%
+  hc_add_series(data = ct[[7]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[7]) %>%
+  hc_add_series(data = ct[[8]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[8]) %>%
+  hc_add_series(data = ct[[9]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[9]) %>%
+  hc_add_series(data = ct[[10]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[10]) %>%
+  hc_add_series(data = ct[[1]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ) , name = titles[11]) %>% 
+  hc_add_series(data = ct[[2]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[12]) %>%
+  hc_add_series(data = ct[[3]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[13]) %>%
+  hc_add_series(data = ct[[4]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[14]) %>%
+  hc_add_series(data = ct[[5]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles[15]) %>%
+  hc_title(text = "2-gram distribuation of words") %>%
+  hc_subtitle(text = "Books by Charles Dickens ") 
+
+mean.d.2.m = as.data.frame( cbind(mean.d.2,rank)) 
+colnames(mean.d.2.m) <- c("count","rank")
+mean.d.1.m = as.data.frame( cbind(mean.d.1,rank)) 
+colnames(mean.d.1.m) <- c("count","rank")
+
+highchart() %>% 
+hc_add_series(data = mean.d.1.m, type="line", hcaes(x = log(rank+1), y = log(count+1) ) , name ="1-gram") %>% 
+  hc_add_series(data = mean.d.2.m , type="line", hcaes(x = log(rank+1), y = log(count+1) ), name = "2-gram") %>% 
+  hc_title(text = "Mean of 1-gram and 2-gram distribuation of words") %>%
+  hc_subtitle(text = "Books by Charles Dickens ") 
+
+
+ 
+
+````
+
+
+
+
+## Problem9
+
+instead of Ernest Hemingway,The books of Aldrich Thomas Bailey is used. All plot of problem 8 is plotted again plus the comparison between the n-grams of the two author and as you can see, the distribution does not differ a lot!
+
+
+```{r ,  message=FALSE, warning=FALSE , fig.align="center" }
+id2 = c(595,625,1757,1758,1830,1861,1948)
+#gutenberg_download( id2 ) -> books2
+#write.csv(books2, file = "books2.csv")
+books2 = read_csv("books2.csv") 
+gutenberg_works( gutenberg_id %in% id2) %>% select(title = title) %>% unlist() -> titles2
+
+
+ct3 = list(1,2,3,4,5,6,7)
+rank = seq(1,1500,10)
+mean.a.1 = as.numeric(matrix(0,nrow = 1,ncol = 150))
+for (i in 1:7){
+  books2 %>% filter(gutenberg_id ==id2[i]) %>% select(text = text)-> temp
+  n = nchar(temp)
+  temp %>% select(rext = text) %>% na.omit() %>% 
+   str_replace_all("\"","") %>% 
+   removePunctuation() %>% 
+   str_split(pattern = "\\s") %>% 
+   unlist() %>% na.omit() -> words
+words <- words[words!=""]
+vapply(ngrams(words, 1L), paste, "", collapse = " ") %>% 
+  table()%>%  as.data.frame(stringsAsFactors = F) %>% 
+  arrange(desc(Freq)) -> temp3
+  temp3 <- temp3[rank,]
+  temp3$Freq = 10000*temp3$Freq/n
+  mean.a.1 = mean.a.1 + temp3$Freq/7
+ct3[[i]] = as.data.frame( cbind(temp3$Freq,rank)) 
+}
+
+highchart() %>% 
+hc_add_series(data = ct3[[1]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ) , name = titles2[1]) %>% 
+  hc_add_series(data = ct3[[2]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles2[2]) %>%
+  hc_add_series(data = ct3[[3]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles2[3]) %>%
+  hc_add_series(data = ct3[[4]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles2[4]) %>%
+  hc_add_series(data = ct3[[5]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles2[5]) %>%
+  hc_add_series(data = ct3[[6]], type="line", hcaes(x =log(rank+1), y = log(V1+1) ), name = titles2[6]) %>%
+  hc_add_series(data = ct3[[7]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles2[7]) %>%
+  hc_title(text = "1-gram distribuation of words") %>%
+  hc_subtitle(text = "Books by Aldrich Thomas Bailey ") 
+
+ct4 = list(1,2,3,4,5,6,7)
+rank = seq(1,1500,10)
+mean.a.2 = as.numeric(matrix(0,nrow = 1,ncol = 150))
+for (i in 1:7){
+  books2 %>% filter(gutenberg_id ==id2[i]) %>% select(text = text)-> temp
+  n = nchar(temp)
+  temp %>% select(rext = text) %>% na.omit() %>% 
+   str_replace_all("\"","") %>% 
+   removePunctuation() %>% 
+   str_split(pattern = "\\s") %>% 
+   unlist() %>% na.omit() -> words
+words <- words[words!=""]
+vapply(ngrams(words, 2L), paste, "", collapse = " ") %>% 
+  table()%>%  as.data.frame(stringsAsFactors = F) %>% 
+  arrange(desc(Freq)) -> temp3
+  temp3 <- temp3[rank,]
+  temp3$Freq = 10000*temp3$Freq/n
+  mean.a.2 = mean.a.2 + temp3$Freq/7
+ct4[[i]] = as.data.frame( cbind(temp3$Freq,rank)) 
+}
+
+highchart() %>% 
+hc_add_series(data = ct4[[1]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ) , name = titles2[1]) %>% 
+  hc_add_series(data = ct4[[2]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles2[2]) %>%
+  hc_add_series(data = ct4[[3]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles2[3]) %>%
+  hc_add_series(data = ct4[[4]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles2[4]) %>%
+  hc_add_series(data = ct4[[5]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles2[5]) %>%
+  hc_add_series(data = ct4[[6]], type="line", hcaes(x =log(rank+1), y = log(V1+1) ), name = titles2[6]) %>%
+  hc_add_series(data = ct4[[7]], type="line", hcaes(x = log(rank+1), y = log(V1+1) ), name = titles2[7]) %>%
+  hc_title(text = "1-gram distribuation of words") %>%
+  hc_subtitle(text = "Books by Aldrich Thomas Bailey ") 
+
+mean.a.2.m = as.data.frame( cbind(mean.a.2,rank)) 
+colnames(mean.a.2.m) <- c("count","rank")
+mean.a.1.m = as.data.frame( cbind(mean.a.1,rank)) 
+colnames(mean.a.1.m) <- c("count","rank")
+
+highchart() %>% 
+hc_add_series(data = mean.a.1.m, type="line", hcaes(x = log(rank+1), y = log(count+1) ) , name ="1-gram") %>% 
+  hc_add_series(data = mean.a.2.m , type="line", hcaes(x = log(rank+1), y = log(count+1) ), name = "2-gram") %>% 
+  hc_title(text = "Mean of 1-gram and 2-gram distribuation of words") %>%
+  hc_subtitle(text = "Books by BAldrich Thomas Bailey ") 
+
+
+highchart() %>% 
+hc_add_series(data = mean.d.1.m, type="line", hcaes(x = log(rank+1), y = log(count+1) ) , name ="Charles Dickens") %>% 
+  hc_add_series(data = mean.a.1.m , type="line", hcaes(x = log(rank+1), y = log(count+1) ), name = "Aldrich Thomas Bailey") %>% 
+  hc_title(text = "Comparison of 1-gram distribuation") %>%
+  hc_subtitle(text = "Between Charles Dickens and Aldrich Thomas Bailey ") 
+
+highchart() %>% 
+hc_add_series(data = mean.d.2.m, type="line", hcaes(x = log(rank+1), y = log(count+1) ) , name ="Charles Dickens") %>% 
+  hc_add_series(data = mean.a.2.m , type="line", hcaes(x = log(rank+1), y = log(count+1) ), name = "Aldrich Thomas Bailey") %>% 
+  hc_title(text = "Comparison of 2-gram distribuation") %>%
+  hc_subtitle(text = "Between Charles Dickens and Aldrich Thomas Bailey ") 
+
+
+
+
+````
+
+I also used kolmogrove-Smirov test to see if the two distribuations are the same or not.
+
+```{r ,  message=FALSE, warning=FALSE , fig.align="center"}
+temp1 = c()
+temp2 = c()
+rank2 = seq(1,1500,10)
+rank1 = seq(1,5000,25)
+
+
+for (i in 1:200){
+  temp1 = c(temp1,rep(rank1[i],floor(mean.d.1[i])))
+}
+for (i in 1:150){
+  temp2 = c(temp2,rep(rank2[i],floor(mean.a.1[i])))
+}
+
+ks.test(temp1,temp2)
+
+temp1 = c()
+temp2 = c()
+
+for (i in 1:200){
+  temp1 = c(temp1,rep(rank1[i],floor(mean.d.2[i])))
+}
+for (i in 1:150){
+  temp2 = c(temp2,rep(rank2[i],floor(mean.a.2[i])))
+}
+
+ks.test(temp1,temp2)
+
+```
+
+## Problem10
+
+Since the distributions are the same, the glm wont works and n-grams are not a good feature for predicting the author.

@@ -1,0 +1,393 @@
+---
+title: "Tenth Week: Principal Component Analysis and Factor Analysis"
+subtitle: "PCA Stock, image, ..."
+author: "Sina Alemohammad 93111706"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+<div align="center">
+<img  src="images/stock.jpg"  align = 'center'>
+</div>
+
+#Introduction
+
+These are the used libraries in this study.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+library("EBImage")
+library("plyr")
+library("tidyr")
+library("dplyr")
+library("highcharter")
+library("readr")
+library("lubridate")
+library("stringr")
+library("h2o")
+library("ggpubr")
+
+```
+
+#Problem 1
+
+The profit of top 10 companies in each sector for 1,3 and 5 year(s) time slices is shown.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+sector = read.csv("constituents.csv") 
+names = list.files("stock_dfs/" , pattern = "*.csv")
+names = paste("./stock_dfs/" , names , sep = '')
+x = lapply(names , read.csv)
+names(x) = sector$Name
+myfunction <- function(data , n){
+  data$Date = as.Date(data$Date)
+  data %>% mutate(yearsdate = Date %m+% years(n)) %>% 
+    mutate(years = data$Close[match(yearsdate, Date)]) %>%
+    na.omit() %>% mutate(profit = years - Open) -> data
+    return(max(data$profit))
+}
+years = c(1,3,5) 
+out = data.frame()
+for (i in unique(sector$Sector) ){
+  for (n in years){
+  temp = which(sector$Sector == i)
+  names = sector$Name[temp]
+  x.temp = x[temp]
+  profits = unlist(lapply(x.temp , myfunction , n = n))
+  data.frame(companies = names , Profit = profits) %>% 
+    arrange(- Profit) -> temp2
+  temp2 %>% mutate(sector = rep(i,nrow(temp2))) %>% mutate(year = rep(n,nrow(temp2))) %>% 
+    slice(1:10) -> temp2
+  out <- rbind(out,temp2)
+  }
+}
+out %>% filter(year == 1) %>% 
+  hchart("bar" , hcaes(x = companies , y = Profit , group = sector)) %>% 
+  hc_title(text = "Top 10 most beneficial companies in stock market") %>% 
+  hc_subtitle(text = "1 year time sclice")
+
+out %>% filter(year == 3) %>% 
+  hchart("bar" , hcaes(x = companies , y = Profit , group = sector)) %>% 
+  hc_title(text = "Top 10 most beneficial companies in stock market") %>% 
+  hc_subtitle(text = "3 years time sclice")
+
+out %>% filter(year == 5) %>% 
+  hchart("bar" , hcaes(x = companies , y = Profit , group = sector)) %>% 
+  hc_title(text = "Top 10 most beneficial companies in stock market") %>% 
+  hc_subtitle(text = "5 years time sclice")
+
+
+
+
+```
+
+#Problem 2
+
+No. The distribution of profits shows that its symmetric to zero ( p value = 5.125e-05). it means that some people has lost money and some has gained and it is not a valid statement.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+myfunction <- function(data){
+  data$Date = as.Date(data$Date)
+  data %>% mutate(day = as.integer(format(Date,"%d"))) %>% filter(day == 13) %>% 
+    mutate(profit = Close - Open) -> temp
+    return(temp$profit)
+}
+
+profit13 = unlist(lapply(x,myfunction))
+down = (profit13 < -10)
+top = (profit13 > 10)
+profit13.temp = profit13[!top & !down]
+hchart(density(profit13.temp)) %>% hc_title(text = "The histogram of profit in the 13th day of month")
+
+t.test(profit13.temp,mu =0)
+
+```
+
+#Problem 3
+
+The most turnover of stock history was on October 10th of 2008 because of a global ; financial crisis in the world!
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+
+myfunction <- function(data){
+  data$Date = as.Date(data$Date)
+  data %>% mutate(profit = High - Low) %>% select(Date , profit) -> temp
+    return(temp)
+}
+temp = lapply(x , myfunction)
+temp2 = data.frame()
+for (i in 1:length(temp) ){
+  temp2 = rbind(temp2, temp[[i]])
+}
+temp2 %>% group_by(Date) %>% summarize(allprofit = sum(profit)) %>% arrange(- allprofit) -> temp3
+
+crashdate = temp3[1,1]
+
+```
+
+<div align="center">
+<img  src="images/stock.jpg"  align = 'center'>
+</div>
+
+
+#Problem 4
+
+The best K is 230. I used residual standard error as the model accuracy.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+a = read.csv("stock_dfs/AAPL.csv")
+temp = a$Open
+a= as.data.frame(temp)
+K = 500
+for (k in 1:K){
+  a %>% cbind(lead(temp ,n=k)) -> a
+}
+colnames(a) <- paste(rep("v",K),as.character(1:K),sep = '')
+n = nrow(a)
+mse = c()
+a = na.omit(a)
+K = seq(2,500,3)
+for (k in K){
+  data = a[, 1:k]
+  temp = (1:(n-k-1) %in% (3629-k):(3629+k))
+  data = data[!temp ,]
+  data = as.data.frame(data)
+  colnames(data) = c(paste(rep("v",k-1),as.character(1:(k-1)),sep = ''),"t")
+  l = lm( t ~ .  , data )
+  error = sqrt(sum(l$residuals^2)/l$df.residual)
+  mse = c(mse,error)
+}
+
+mse.df = data.frame(MSE = mse , K = K)
+mse.df %>%  hchart("line",hcaes(x = K,y = MSE)) %>% 
+  hc_title(text = "Model residual standard error vs k")
+N = which(mse.df$MSE == min(mse.df$MSE))
+
+sprintf("The Best k is %i with residual standard error = %.2f  ", K[N] , mse.df[N,1])
+
+```
+
+#Problem 5
+
+Because of variability in the data size of each company, I just applied PCA on the opening price of the companies with the most and equal number of available days data.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+nr = unlist(lapply(x,nrow))
+x.new = x[which(nr == max(nr))]
+myfunction <- function(data){
+    return(data$Open)
+}
+sector$Name[which(nr == max(nr))] -> name
+open = lapply(x.new,myfunction)
+temp = data.frame()
+temp2 = as.data.frame(open[[1]])
+colnames(temp2) <- name[1]
+temp = temp2
+for(i in 2:length(x.new)){
+  temp2 = as.data.frame(open[[i]])
+  colnames(temp2) <- name[i]
+  temp = cbind(temp,temp2)
+}
+
+r = prcomp(temp)
+
+h = data.frame(v = cumsum(r$sdev)/sum(r$sdev) , PC = 1:length(r$sdev) )
+h %>% hchart("scatter" , hcaes(x = PC , y = v)) %>% 
+  hc_title(text = "Variance of Kept PCS")
+sprintf("The first 3 PCs keep %f of all the data variance" , h[3,1] )
+
+```
+
+#Problem 6
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+myfuction = function(x){
+  x %>% select(Open, Date)
+}
+
+open_data = lapply(x, myfuction)
+ldply(open_data, data.frame) %>% spread(.id, Open) -> sp
+sp[is.na(sp)] = 0
+
+category = sector %>% select(Sector) %>% distinct()
+category = category$Sector
+
+for (i in category) {
+  a = colnames(sp) %in% sector$Name[sector$Sector == i]
+  sp[,a] %>% rowMeans() -> m
+  name = paste(i)
+  old = colnames(sp)
+  sp %>% mutate(a = m) -> sp
+  colnames(sp) = c(old, name)
+}
+pca = prcomp(sp %>% select(as.character(category)))
+biplot(pca)
+
+```
+
+Based on the bi plot , It seems that the stock price of health care companies are quiet expensive in comparison to the other stock prices.
+This variation in the stock prices has caused the average of opening stock price of different companies type to be clustered in to two major clusters in scatter plot of first two PCs. 
+
+
+#Problem 7
+
+No it doesn't help! Because PCA changes the mapping of the each axis, it will ruin everything. In the time series analysis the data for predicting the next value should be the previous data, not a linear mapping of other data. As you can see, the residual standard error is not good at all.
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+b = read.csv("stock_dfs/AAPL.csv")
+temp = b$Open
+b= as.data.frame(temp)
+K = 100
+for (k in 1:K){
+  b %>% cbind(lead(temp ,n=k)) -> b
+}
+colnames(b) <- paste(rep("v",K),as.character(1:K),sep = '')
+b = na.omit(b)
+
+a = read.csv("stock_dfs/AAPL.csv")
+a = a[-1]
+r = prcomp(a)
+temp = r$x[,1]
+a = as.data.frame(temp)
+K = 100
+for (k in 1:K){
+  a %>% cbind(lead(temp ,n=k)) -> a
+}
+colnames(a) <- paste(rep("v",K),as.character(1:K),sep = '')
+n = nrow(a)
+mse = c()
+a = na.omit(a)
+K = seq(2,100,3)
+for (k in K){
+ 
+  data = a[, 1:k]
+  data[,k] = b[,k]
+  data = as.data.frame(data)
+  colnames(data) = c(paste(rep("v",k-1),as.character(1:(k-1)),sep = ''),"t")
+  l = lm( t ~ .  , data )
+  error = sqrt(sum(l$residuals^2)/l$df.residual)
+  mse = c(mse,error)
+}
+
+mse2.df = data.frame( MSE = mse , K = K)
+
+mse2.df %>%  hchart("line",hcaes(x = K,y = MSE)) %>% 
+  hc_title(text = "Model residual standard error vs k") 
+
+N = which(mse2.df$MSE == min(mse2.df$MSE))
+sprintf("The Best k is %i with residual standard error = %f   ", K[N] , mse2.df[N,1])
+
+```
+
+#Problem 8
+
+Based on he histogram of profits, its normal around the zero but it has a heavy tailed normal like distribution.
+
+The logistic model has a error of almost 0.38 percent. Its not very good but its still better than randomness!
+
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+idexes = read_csv("indexes.csv")
+idexes %>% mutate(prev_day = lag(SP500, 1)) %>% 
+  mutate(profit = SP500 - prev_day) %>% mutate(sign = sign(profit)) %>% 
+  select(Date, profit, sign) %>% na.omit() -> y
+
+y %>% filter(profit > -50 , profit < 50) -> temp
+
+hchart(density(y$profit)) %>% 
+  hc_title(text = "The histogram of  S&P500 Index Profit",
+           align = 'center') %>% 
+  hc_xAxis(title = list(text = 'Profit'))
+
+ggqqplot(temp$profit)
+
+
+
+pca = prcomp(sp %>% select(-Date))
+y %>% filter(sign != 0) %>% as.data.frame() -> data
+pca$x[, 1:10] %>% as.data.frame() %>% mutate(Date = as.Date(sp$Date)) -> pca
+full_join(data,pca , by = "Date") %>% na.omit() -> data
+data <- data %>% select(-Date) %>% select(-profit) %>% mutate(sign = (sign + 1)/2)
+model = glm(formula = sign ~ ., data = data , family = binomial(link = "logit"))
+summary(model)
+data$pred = predict.glm(model, newdata = data)
+data$result = ifelse(data$pred > 0.5, 1, 0)
+error = mean(data$sign != data$result)
+sprintf("The model error is %f" , error)
+
+
+```
+
+#Problem 9
+
+The size vs number of kept PCs, snr vs the number of the kept PCs and the snr vs size is plotted. The best number of kept PCs is chosen best on a reasonable snr, which is 20, of the compressed image. 
+
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+pic = flip(readImage("images/stock.jpg"))
+red.weigth   = .33; green.weigth = .33; blue.weigth  = 0.33
+img = red.weigth * imageData(pic)[,,1] +
+  green.weigth * imageData(pic)[,,2] + blue.weigth  * imageData(pic)[,,3]
+pca.img = prcomp(img, scale=TRUE)
+size = c()
+snr = c()
+n = 350
+for (i in 1:n){
+chosen.components = 1:i
+feature.vector = pca.img$rotation[,chosen.components]
+compact.data = t(feature.vector) %*% t(img)
+temp = (object.size(compact.data) + object.size(feature.vector))/1000000
+size = c(size,temp)
+approx.img = t(feature.vector %*% compact.data) 
+snr = c(snr,mean(img^2)/mean((img - approx.img)^2 ))
+}
+snr = 10*log10(snr)
+temp1 = data.frame(PC = 1:n,size = size)
+temp2 = data.frame(PC = 1:n,SNR = snr)
+temp3 = data.frame(SNR = snr , size = size)
+temp1 %>% hchart("line" , hcaes(x = PC , y = size)) %>% 
+  hc_title(text = "Size vs number of kept PCs") %>% 
+   hc_yAxis(title = list(text = "Mean Value"),
+           plotLines = list(list(label = list(text = "Size of original image"),
+                                 color = "#00FF00",
+                                 width = 3,
+                                 value = object.size(img)/1000000))) %>% 
+             hc_xAxis(text = "PCs")
+
+temp2 %>% hchart("line" , hcaes(x = PC , y = snr)) %>% 
+  hc_title(text = "SNR vs number of kept PCs") %>% 
+  hc_yAxis(title = list(text = "snr"),
+           plotLines = list(list(label = list(text = "Threshold of SNR = 20"),
+                                 color = "#00FF00",
+                                 width = 3,
+                                 value = 20))) 
+
+temp3 %>% hchart("line" , hcaes(x = snr , y = size)) %>% 
+  hc_title(text = "SNR vs size")
+
+s = abs(snr - 20)
+N = which(s == min(s))
+
+chosen.components = 1:N
+feature.vector = pca.img$rotation[,chosen.components]
+compact.data = t(feature.vector) %*% t(img)
+temp = (object.size(compact.data) + object.size(feature.vector))/1000000
+approx.img = t(feature.vector %*% compact.data) 
+image(approx.img, col = grey(seq(0, 1, length = 256)))
+sprintf("The size of the compressed image is %.2f Mb with snr = %.2f and %i kept PCs." ,
+        temp , 10*log10(mean(img^2)/mean((img - approx.img)^2 )), N)
+
+```
+
+
+#Problem 10
+
+1. We can use more complicated modes for the prediction of opening price, like RNN or higher order regressions.
+2. assuming that one person should sell one stock and buy another stock every day, what is the worst possible moves one can take in order to loose the maximum money
+3. assuming that one person should sell one stock and buy another stock every day, what is the best possible moves one can take in order to gain the maximum money
+4. Usually, the opening price of one day is not the same as the finishing price of the previous day. what are the involving parameters, if any in our data base, in the amount of change in the opening price of a day and its previous day finishing price.
+5. What are the companies with the most correlated in the changes in the price of theire stock. For example, how much does the decrease the price of the Apple stock affects the price of the stock of other companies? How to they react to the decrease in the Apple stock price?
+
+
+

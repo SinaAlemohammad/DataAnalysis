@@ -1,0 +1,291 @@
+---
+title: "DataAnalysis_HW2"
+author: "Sina Alemohammad - 93111706"
+date: "February 19, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Introduction
+
+In this study, a report for the analysis of the phones data is provided. In all of figures, the Wall Street journal theme is used.
+
+This is the packages used in this study
+
+```{r cars, message=FALSE, warning=FALSE}
+library(ggplot2)
+library(ggthemes)
+library(dplyr)
+library(readr)
+library(grid)
+```
+
+For plotting multiple figures in one figure, a separate function is used for plotting the figures
+
+```{r pressure, echo=FALSE}
+multiplot <- function(..., plotlist=NULL, file, cols=1, layout=NULL) {
+  require(grid)
+  
+  # Make a list from the ... arguments and plotlist
+  plots <- c(list(...), plotlist)
+  
+  numPlots = length(plots)
+  
+  # If layout is NULL, then use 'cols' to determine layout
+  if (is.null(layout)) {
+    # Make the panel
+    # ncol: Number of columns of plots
+    # nrow: Number of rows needed, calculated from # of cols
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                     ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+  
+  if (numPlots==1) {
+    print(plots[[1]])
+    
+  } else {
+    # Set up the page
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+    
+    # Make each plot, in the correct location
+    for (i in 1:numPlots) {
+      # Get the i,j matrix positions of the regions that contain this subplot
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+      
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+
+```
+
+The data is imported and stored in the variable 'x'
+
+```{r, message=FALSE, warning=FALSE}
+x <- read_csv("mobile_data.csv")
+```
+
+# Problem 1
+
+This is the code for problem 1
+
+```{r}
+x%>% group_by(company) %>%  summarise(count= n()) %>% arrange(desc(count)) -> company.production
+
+company.production$company <- factor(company.production$company , levels = company.production$company)
+company.production <- company.production[1:20,]
+
+p <- ggplot(company.production , aes(x = company , y =  count)) + theme_wsj(base_size = 6) +
+  theme(axis.text.x = element_text(angle=65, vjust=0.6)) + geom_bar(stat = "identity")
+p
+```
+
+# Problem 2
+
+This is the code for problem 2
+
+```{r, message=FALSE, warning=FALSE}
+x %>% group_by(year) %>% summarise(mean = mean(dim_length, na.rm = T)) -> Length.mean
+x %>% group_by(year) %>% summarise(mean = mean(dim_breadth, na.rm = T)) -> Breadth.mean
+x %>% group_by(year) %>% summarise(mean = mean(dim_thickness, na.rm = T)) -> Thickness.mean
+x %>% group_by(year) %>% summarise(mean = mean(cam_px, na.rm = T)) -> px.mean
+
+p.length <- ggplot(Length.mean , aes(x = year, y = mean)) + theme_wsj(base_size = 5) + 
+  geom_point() + geom_smooth(method="lm", se=F) + ggtitle(" Length Mean VS Year")
+p.breadth <- ggplot(Breadth.mean , aes(x = year, y = mean)) + theme_wsj(base_size = 5) + 
+  geom_point() + geom_smooth(method="lm", se=F) + ggtitle(" Breadth Mean VS Year")
+p.thickness <- ggplot(Thickness.mean , aes(x = year, y = mean)) + theme_wsj(base_size = 5) + 
+  geom_point() + geom_smooth(method="lm", se=F) + ggtitle(" Thickness Mean VS Year")
+p.px <- ggplot(px.mean , aes(x = year, y = mean)) + theme_wsj(base_size = 5) + 
+  geom_point() + geom_smooth(method="lm", se=F) + ggtitle(" Camera quality Mean VS Year")
+multiplot(p.length, p.breadth, p.thickness, p.px, cols=2)
+```
+
+# Problem 3
+
+This is the code for problem 3. The bar plot of price mean based on having LTE or the number simcards is plotted 
+
+```{r}
+x %>% group_by(sim_no) %>% summarise(mean = mean(price, na.rm = T)) -> Simnum.price.mean
+x %>% group_by(LTE) %>% summarise(mean = mean(price, na.rm = T)) -> LTE.price.mean
+
+p.simnum <- ggplot(Simnum.price.mean , aes(x = factor(sim_no) , y =  mean)) + theme_wsj(base_size = 6) +
+  theme(axis.text.x = element_text(angle=65, vjust=0.6)) + geom_bar(stat = "identity") +
+  ggtitle("Price Mean VS sim number")
+p.LTE <- ggplot(LTE.price.mean , aes(x = LTE , y =  mean)) + theme_wsj(base_size = 6) +
+  theme(axis.text.x = element_text(angle=65, vjust=0.6)) + geom_bar(stat = "identity") +
+  ggtitle("Price Mean VS LTE")
+multiplot(p.simnum, p.LTE,cols=1)
+```
+
+
+Also the bar plot of price mean based on different combinations of LTE and  the number simcards is plotted 
+
+```{r}
+x %>% group_by(.dots = c("LTE","sim_no")) %>% summarise(mean = mean(price, na.rm = T)) -> LTE.simnum.price.mean
+LTE.simnum.price.mean$names <- rbind("LTE : NO , Simnum = 0","LTE : NO , Simnum = 1","LTE : NO , Simnum = 2",
+                                "LTE : NO , Simnum = 3","LTE : NO , Simnum = 4","LTE : YES , Simnum = 0",
+                                "LTE : YES , Simnum = 1","LTE : YES , Simnum = 2","LTE : YES , Simnum = 3")
+
+p.LTE.simnum <- ggplot(LTE.simnum.price.mean , aes(x = names , y =  mean )) + theme_wsj(base_size = 6) +
+  theme(axis.text.x = element_text(angle=65, vjust=0.6)) + geom_bar(stat = "identity" , aes(fill = LTE)) +
+  ggtitle("Price Mean VS LTE and sim number ")
+p.LTE.simnum
+
+```
+
+# Problem 4
+
+This is the code for problem 4
+
+```{r, message=FALSE, warning=FALSE}
+temp <- x[which(x$year == '2017'),]
+
+p.jack <- ggplot(temp, aes(x = audio_jack, y = dim_thickness)) +
+  geom_boxplot(varwidth=T) + theme_wsj(base_size = 6) +
+  labs(title="Thickness VS Audio jack", caption="Year 2017",x="Audio jack",y= "Thickness")
+p.jack
+```
+
+# Problem 5
+
+This is the code for problem 5. Xperia XZ Premium has the most PPI.
+
+```{r, message=FALSE, warning=FALSE}
+x$ppi = sqrt((x$px_row) ^ 2 + (x$px_col) ^ 2)/ x$display_size
+
+p.ppi.hist <- ggplot(data = x, aes(ppi)) + theme_wsj(base_size = 6) + 
+  geom_histogram(binwidth = 10, col="black", size=.1) +
+  labs( title = "Histogram of mobiles PPI") + xlab("PPI") + ylab("Count")
+x %>% group_by(year) %>% summarise(mean = mean(ppi, na.rm = T)) -> year.ppi.mean
+
+p.ppi.mean <- ggplot(data = year.ppi.mean, aes(x = year, y = mean)) + theme_wsj(base_size = 6) + 
+  geom_point() + geom_smooth(method="lm", se=F) + ggtitle(" PPI Mean VS Year") + 
+  xlab("Year") + ylab("PPI mean")
+
+multiplot(p.ppi.hist, p.ppi.mean,cols=1)
+temp <- arrange(x, desc(ppi))
+sprintf("The devise with the most ppi is %s. And its ppi is %f ", temp$device[1] , temp$ppi[1] )
+```
+
+# Problem 6
+
+This is the code for problem 6. For measuring the Ghushkoobness the phones, the thickness of the phones divided by display size cross row and columns pixels among the phones that doesn't have the LTE, GPS and wlan is considered. 
+
+```{r, message=FALSE, warning=FALSE}
+LTE.gh <- x$LTE == "No"
+wlan.gh <- x$wlan == "No"
+gps.gh <- x$gps == "No"
+x.gh <- x[LTE.gh & wlan.gh & gps.gh,]
+x.gh$gh <- (x.gh$dim_thickness)/(x.gh$display_size*x.gh$px_row*x.gh$px_col)
+x.gh <- arrange(x.gh,desc(gh))
+s.x.gh = x.gh[1:10,c("device","gh")]
+s.x.gh$device <-  factor(s.x.gh$device , levels = s.x.gh$device)
+
+p.gh <- ggplot(s.x.gh , aes(x = device , y =  gh)) + theme_wsj(base_size = 6) +
+  theme(axis.text.x = element_text(angle=65, vjust=0.6)) + geom_bar(stat = "identity") +
+  ggtitle("The most GUSHKUB phones")
+p.gh
+
+
+```
+
+The most Gushkoop phone is Nokia 8910i. 
+This is the most Gushkoob phone picture :
+
+
+![](C:\Users\Sina Alemohammad\Desktop\Data Analysis\HW2\hw_02/nokia.jpg)
+
+
+Which is the most Gushkoob phone I have ever seen. It has even a shield in front of it!!!
+
+#Problem 7
+
+This is the code fro problem 7. The names of the phones with density < 1 is printed.
+
+```{r, message=FALSE, warning=FALSE}
+x$density <- 1000*(x$weight)/(x$dim_length*x$dim_breadth*x$dim_thickness)
+x$device[na.omit(x$density < 1)]
+p.density <- ggplot(data = x, aes(density)) + theme_wsj(base_size = 6) + 
+  geom_histogram(binwidth = 0.1, col="black", size=.1) +
+  labs( title = "Histogram of phones density") + xlab("PPI") + ylab("Count") +
+  geom_vline(xintercept = 1 , size = 1 , color = "Blue")
+p.density
+```
+
+# Problem 8
+
+This is the code for problem 8.
+```{r, message=FALSE, warning=FALSE}
+p.battery.weight <- ggplot(x , aes(x = battery_mah, y = weight)) + theme_wsj(title_family = "mono") + 
+  geom_point(base_size = 6) + ggtitle(" Battery VS Weight") + xlab("Battery") + ylab("weight")
+p.battery.weight 
+
+sprintf(" The corelation between battery_mah an and weight is : %f" ,
+        cor( x$battery_mah,x$weight , use = "na.or.complete") )
+```
+
+# Problem 9
+
+This is the code for ptoblem 9. The histogram of prices for Samsung phones with respect to different years  and the name of the phone with the most price for each year is plotted.
+
+```{r}
+s.p <- na.omit(x[which(x$company == "Samsung"),c("device","price","year") ])
+s.p %>% group_by(year) %>% slice(which.max(price)) -> s.max.price
+s.max.price$price = s.max.price$price*0.85
+
+
+p.hist.price = ggplot(s.p, aes(x = factor(year), y = price)) +
+  geom_violin( na.rm = TRUE , scale = "width" , aes(fill = factor(year)),draw_quantiles = c(0.25, 0.5,   0.75),show.legend = FALSE) + 
+  theme_wsj(base_size = 6) + geom_jitter(height = 1, width = 0.2) + 
+  geom_text(data = s.max.price ,aes(label=device), angle = 90, hjust = -0.15 , nudge_x = 0.2 ) +
+   ggtitle("Histogram of price of Samsung phones VS year")
+p.hist.price 
+
+```
+
+
+# Problem 10
+
+The analysis of different trends in the phones in different years is an intresting analysis. So I plotted the trends in phones in term of percentages of the phones usong different os types, having wlan and gps options.
+
+This is the trend for os types in the phones 
+
+```{r}
+x.os <- na.omit(x[,c("os_type","year","price","gps","wlan") ])
+p.os <- ggplot(x.os, aes(year)) + geom_bar(aes(fill = os_type),position = "fill",na.rm = T) +
+  theme_wsj(base_size = 6) +
+  ggtitle("Trend on OS type")
+p.os
+```
+
+As you can see, the android os has become popular during the previouse years and most of the phones oparates on android. 
+
+This is the trend on having GPS option
+
+```{r}
+p.gps <- ggplot(x.os, aes(year)) + geom_bar(aes(fill = gps) ,position = "fill",na.rm = T)+
+    theme_wsj(base_size = 6) +
+  ggtitle("Trend on GPS option")
+p.gps
+```
+
+As I expected, the rate of having the GPs option is increasing as the years pass.
+
+This is the trend on having wlan option
+
+```{r}
+p.wlan <- ggplot(x.os, aes(year)) + geom_bar(aes(fill = wlan) ,position = "fill",na.rm = T)+
+    theme_wsj(base_size = 6) +
+  ggtitle("Trend on wlan option")
+p.wlan
+```
+
+As I expected, the rate of having the wlan option is increasing as the years pass.
+
+

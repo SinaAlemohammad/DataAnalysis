@@ -1,0 +1,654 @@
+---
+title: "Fourth Week: Hypothesis Testing"
+subtitle: "TIMSS Analysis"
+author: "Sina Alemohammad 93111706"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+#Introduction and discussion
+
+In this study, we are going to analyse the TIMSS data using hypothesis testing.
+These are the used libraries in this study
+
+```{r, message=FALSE, warning=FALSE}
+library(readr)
+library(tidyr)
+library(ggplot2)
+library(dplyr)
+library(highcharter)
+
+
+bts = read_rds("./bts.rds")
+btm = read_rds("./btm.rds")
+bsg = read_rds("./bsg.rds")
+bcg = read_rds("./bcg.rds")
+
+```
+
+This data base contains the score of students from a variety of countries and different backgrounds and situations which is provided by asking different questions from students, teachers and school head.
+I have just included the score of mathematics. The data contains information about 8th and 9th grade.
+I only considered the 8th grade students because we have the questions are asked from 8th grade teachers based on the question book and also, if we look at the histogram of different grades, there are few 9th grade students in the data base, making the population size small.
+
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+hchart(as.numeric(bsg$idgrade) , name = "Grades") %>% 
+  hc_xAxis(title = list(text = "Students Grade")) %>%
+  hc_yAxis(title = list(text = "Counts")) %>% 
+  hc_title(text = "Histogram of students grades") %>% 
+  hc_subtitle(text = "Based on TIMSS data") 
+  
+```
+
+Because the populations size of data for 8th grade is big, if we apply any hypothesis the p value will be too small.
+Any small deviation from the null hypothesis will results in rejection of the hypothesis. So, any estimation of the parameters of data distribution is valid because of data size. We can easily compare the mean of different sub population of data and compare to each other by a good visualization, box plot and histogram, of data. 
+To mine more information about the data, I have used the Pearson correlation test. We can assume linear model between between the students score and different conditions in the asked questions, in which all of the are in a decreasing or increasing value. 
+
+
+#Problem 1
+
+There is weak correlation between teacher satisfaction and students is small. Funny to say, But the students having a very satisfied teacher perform poorer from other students!
+
+```{r, message=FALSE, warning=FALSE}
+bsg %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool, student = idstud,
+         m1 = bsmmat01, m2 = bsmmat02, m3 = bsmmat03,
+         m4 = bsmmat04, m5 = bsmmat05) %>% 
+  mutate(m = (m1+m2+m3+m4+m5)/5) %>% 
+  group_by(country , school) %>% 
+  summarise(Student.Score = sum(m)/n())-> student
+
+btm %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool,
+         m1 = btbg10a, m2 = btbg10b, m3 = btbg10c,
+         m4 = btbg10d, m5 = btbg10e, m6 = btbg10f ,m7 = btbg10g) %>% 
+  mutate(m = (m1 + m2 + m3 + m4 + m5 + m6 + m7)) %>% 
+  group_by(country, school) %>% summarise(m = sum(m)/n()) %>% 
+  mutate(Teacher.satisfaction = as.numeric( cut(m,breaks = 4, labels = 1:4))) -> teacher_satis
+
+temp = ungroup(na.omit(full_join(student,teacher_satis, by = c("country","school"))))
+cor.test(formula = ~ Teacher.satisfaction + Student.Score, data = temp)
+
+hchart(density(temp$Student.Score[temp$Teacher.satisfaction == 4]), name = "Not intrested") %>% 
+  hc_add_series(density(temp$Student.Score[temp$Teacher.satisfaction == 3]), name = "Fairly intrested") %>% 
+  hc_add_series(density(temp$Student.Score[temp$Teacher.satisfaction == 2]) , name = "Quiet intrested") %>% 
+  hc_add_series(density(temp$Student.Score[temp$Teacher.satisfaction == 1]) , name =  "Very intrested") %>% 
+  hc_xAxis(title = list(text = "Student Score")) %>%
+  hc_yAxis(title = list(text = "Student Score density")) %>% 
+  hc_title(text = "Teacher Satisfaction effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data") 
+temp$Teacher.satisfaction = as.factor(temp$Teacher.satisfaction)
+levels(temp$Teacher.satisfaction) = c("Very intrested","Quiet intrested","Fairly intrested","Not intrested")
+hcboxplot(x = temp$Student.Score , var = temp$Teacher.satisfaction ) %>% hc_chart(type = "column") %>% 
+  hc_xAxis(title = list(text = "Teacher Satisfaction")) %>%
+  hc_yAxis(title = list(text = "Student Score")) %>% 
+  hc_title(text = "Teacher Satisfaction effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data") 
+
+temp %>% group_by(Teacher.satisfaction) %>% 
+  ggplot() +
+  geom_boxplot(aes(x = Teacher.satisfaction, y = Student.Score , group = Teacher.satisfaction ,
+                   fill = factor(Teacher.satisfaction)) , show.legend = FALSE) +
+  ggtitle("Teacher Satisfaction effect on student score") -> p1
+```
+
+#Problem 2
+
+The sum of students parents education is cut into 4 equal size, Primary, Upper secondary, Bachelor's or equivalent and postgraduate education levels.
+
+Not surprising, There is a strong correlation between a student's score and his/her parents educations level.
+
+```{r, message=FALSE, warning=FALSE}
+bsg %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool, student = idstud, 
+         m1 = bsbg07a, m2 = bsbg07b) %>% filter(m1 < 8 , m2 < 8) %>% 
+  mutate(edu = m1+m2) %>%
+  mutate(edu = as.numeric(cut(edu,breaks = 4,label = 1:4))) %>% 
+  select(country = country, school = school, student = student,edu = edu) -> p.education
+
+
+bsg %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool, student = idstud,
+         m1 = bsmmat01, m2 = bsmmat02, m3 = bsmmat03,
+         m4 = bsmmat04, m5 = bsmmat05) %>% 
+  mutate(Student.Score = (m1+m2+m3+m4+m5)/5) -> student
+
+temp = ungroup(na.omit(full_join(student,p.education, by = c("country","school", "student")))) 
+
+cor.test(formula = ~ edu + Student.Score, data = temp)
+
+hchart(density(temp$Student.Score[temp$edu == 1]) , name = "Primary education")%>% 
+  hc_add_series(density(temp$Student.Score[temp$edu == 2]) ,name = "Upper secondary education" ) %>%  
+  hc_add_series(density(temp$Student.Score[temp$edu == 3]) ,name = "Bachelor's or equivalent level" ) %>%  
+  hc_add_series(density(temp$Student.Score[temp$edu == 4]) ,name = "Postgraduate degree" ) %>% 
+  hc_xAxis(title = list(text = "Student Score")) %>%
+  hc_yAxis(title = list(text = "Student Score density")) %>% 
+  hc_title(text = "Parents education effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data") 
+temp$edu = as.factor(temp$edu)
+levels(temp$edu) = c("Primary education","Upper secondary education",
+                                      "Bachelor's or equivalent level","Postgraduate degree")
+hcboxplot(x = temp$Student.Score , var = temp$edu ) %>% hc_chart(type = "column") %>% 
+  hc_xAxis(title = list(text = "Parent education")) %>%
+  hc_yAxis(title = list(text = "Student Score")) %>% 
+  hc_title(text = "Parents education effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data") 
+
+temp %>% group_by(edu) %>% 
+  ggplot() +
+  geom_boxplot(aes(x = edu, y = Student.Score , group = edu ,
+                   fill = factor(edu)) , show.legend = FALSE) +
+  ggtitle("Parents education effect on student score") -> p2
+```
+
+#Problem 3
+
+There is strong correlation between home accommodations and students score.
+This is a little surprising because this accommodations contains the permission to use internet or having a personal computer, which believed, in Iran, that these kind of accommodations distract the students from their school duties.
+
+```{r, message=FALSE, warning=FALSE}
+bsg %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool, student = idstud,
+         m1 = bsmmat01, m2 = bsmmat02, m3 = bsmmat03,
+         m4 = bsmmat04, m5 = bsmmat05) %>% 
+  mutate(Student.Score = (m1+m2+m3+m4+m5)/5) -> student
+ 
+
+bsg %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool, student = idstud, 
+         m1 = bsbg06a, m2 = bsbg06b, m3 = bsbg06c,m4 = bsbg06d , m5 = bsbg06e , m6  = bsbg06f ) %>% 
+  mutate(ac = -(m1 + m2 + m3 + m4 + m5 + m6)+12 ) %>%
+  select(country = country, school = school, student = student,ac = ac) -> home.ac
+
+temp = ungroup(na.omit(full_join(student,home.ac, by = c("country","school" , "student"))))
+cor.test(formula = ~ ac + Student.Score, data = temp)
+
+
+hchart(density(temp$Student.Score[temp$ac == 6]) , name = "6 accommodation")%>% 
+  hc_add_series(density(temp$Student.Score[temp$ac == 5]) ,name = "5 accommodation" ) %>% 
+  hc_add_series(density(temp$Student.Score[temp$ac == 4]) , name = "4 accommodation") %>% 
+  hc_add_series(density(temp$Student.Score[temp$ac == 3]) , name = "3 accommodation") %>% 
+  hc_add_series(density(temp$Student.Score[temp$ac == 2]), name = "2 accommodation") %>% 
+  hc_add_series(density(temp$Student.Score[temp$ac == 1]), name = "1 accommodation") %>% 
+  hc_add_series(density(temp$Student.Score[temp$ac == 0]), name = "0 accommodation") %>% 
+  hc_xAxis(title = list(text = "Student Score")) %>%
+  hc_yAxis(title = list(text = "Student Score density")) %>% 
+  hc_title(text = "Home accommodation effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data") 
+temp$ac = as.factor(temp$ac)
+levels(temp$ac) = c("0 accommodation","2 accommodation","3 accommodation","4 accommodation",
+                     "4 accommodation","5 accommodation","6 accommodation")
+hcboxplot(x = temp$Student.Score , var = temp$ac ) %>% hc_chart(type = "column") %>% 
+  hc_xAxis(title = list(text = "Home accommodation")) %>%
+  hc_yAxis(title = list(text = "Student Score")) %>% 
+  hc_title(text = "Home accommodation effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data") 
+
+temp %>% group_by(ac) %>% 
+  ggplot() +
+  geom_boxplot(aes(x = ac, y = Student.Score , group = ac ,
+                   fill = factor(ac)) , show.legend = FALSE) +
+  ggtitle("Home accommodation effect on student score") -> p3
+```
+
+#Problem 4
+
+I defined the school environment based on the 16th question in the students question book which is about the level of violence among the students.
+Not surprising, The more violent the environment, the poorer the students perform in their exams.
+
+```{r, message=FALSE, warning=FALSE}
+bsg %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool, student = idstud,
+         m1 = bsmmat01, m2 = bsmmat02, m3 = bsmmat03,
+         m4 = bsmmat04, m5 = bsmmat05) %>% 
+  mutate(m = (m1+m2+m3+m4+m5)/5) %>% 
+  group_by(country , school) %>% 
+  summarise(Student.Score = sum(m)/n())-> student
+
+bsg %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool, student = idstud, 
+         m1 = bsbg16a, m2 = bsbg16b, m3 = bsbg16c,m4 = bsbg16d , m5 = bsbg16e , m6  = bsbg16f,
+         m7 = bsbg16h , m8 = bsbg16i) %>% 
+  mutate(environment = (m1 + m2 + m3 + m4 + m5 + m6 + m7 + m8) ) %>%
+  select(country = country, school = school, student = student,environment = environment) -> s.env
+
+temp = ungroup(na.omit(full_join(student,s.env, by = c("country","school"))))
+m = mean(temp$environment)
+temp[temp$environment < m,5] = 0
+temp[temp$environment > m,5] = 1
+
+t.test(Student.Score ~ environment, data = temp)
+
+hchart(density(temp$Student.Score[temp$environment == 0]) , name = "Violence")%>% 
+  hc_add_series(density(temp$Student.Score[temp$environment == 1]) ,name = "None violence" ) %>% 
+  hc_xAxis(title = list(text = "Student Score")) %>%
+  hc_yAxis(title = list(text = "Student Score density")) %>% 
+  hc_title(text = "School envirement effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data") 
+
+temp$environment = as.factor(temp$environment)
+levels(temp$environment) = c("Violence","None violence")
+hcboxplot(x = temp$Student.Score , var = temp$environment ) %>% hc_chart(type = "column") %>% 
+  hc_xAxis(title = list(text = "School envirement")) %>%
+  hc_yAxis(title = list(text = "Student Score")) %>% 
+  hc_title(text = "Home accommodation effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data") 
+
+temp %>% group_by(environment) %>% 
+  ggplot() +
+  geom_boxplot(aes(x = environment, y = Student.Score , group = environment ,
+                   fill = factor(environment)) , show.legend = FALSE) +
+  ggtitle("School environment effect on student score") -> p4
+
+```
+
+#Problem 5
+
+There is a week correlation between teacher educations and students score. Maybe this is because the level of teacher education is not important for the an 8th grade student.
+
+```{r, message=FALSE, warning=FALSE}
+bsg %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool, student = idstud,
+         m1 = bsmmat01, m2 = bsmmat02, m3 = bsmmat03,
+         m4 = bsmmat04, m5 = bsmmat05) %>% 
+  mutate(m = (m1+m2+m3+m4+m5)/5) %>% 
+  group_by(country , school) %>% 
+  summarise(Student.Score = sum(m)/n())-> student
+
+btm %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool,
+         teacher.education = btbg04) %>%  group_by(country , school) %>% 
+summarise(teacher.education = sum(teacher.education)/n()) %>% 
+  mutate(teacher.education = as.numeric(cut(teacher.education,breaks = 7,label = 1:7)))-> teacher.edu
+
+temp = ungroup(na.omit(full_join(student,teacher.edu, by = c("country","school")))) 
+cor.test(formula = ~ teacher.education + Student.Score, data = temp)
+hchart(density(temp$Student.Score[temp$teacher.education == 1]) , name = "Did not complete Upper secondary education")%>% 
+  hc_add_series(density(temp$Student.Score[temp$teacher.education == 2]) ,name = "Upper secondary education" ) %>%  
+  hc_add_series(density(temp$Student.Score[temp$teacher.education == 3]) ,name = "Post-secondary, non-tertiary education" ) %>%  
+  hc_add_series(density(temp$Student.Score[temp$teacher.education == 4]) ,name = "Short-cycle tertiary education" ) %>%  
+  hc_add_series(density(temp$Student.Score[temp$teacher.education == 5]) ,name = "Bachelor's or equivalent level" ) %>%  
+  hc_add_series(density(temp$Student.Score[temp$teacher.education == 6]) ,name = "Master's or equivalent level" ) %>%  
+  hc_add_series(density(temp$Student.Score[temp$teacher.education == 7]) ,name = "Doctor or equivalent level" ) %>% 
+  hc_xAxis(title = list(text = "Student Score")) %>%
+  hc_yAxis(title = list(text = "Student Score density")) %>% 
+  hc_title(text = "Teacher education effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data") 
+temp$teacher.education = as.factor(temp$teacher.education)
+levels(temp$teacher.education) = c("Did not complete Upper secondary education","Upper secondary education",
+                                   "Post-secondary, non-tertiary education","Short-cycle tertiary education",
+                                   "Bachelor's or equivalent level","Master's or equivalent level",
+                                   "Doctor or equivalent level")
+hcboxplot(x = temp$Student.Score , var = temp$teacher.education ) %>% hc_chart(type = "column") %>% 
+  hc_xAxis(title = list(text = "Teacher education")) %>%
+  hc_yAxis(title = list(text = "Student Score")) %>% 
+  hc_title(text = "Teacher education effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data") 
+
+temp %>% group_by(teacher.education) %>% 
+  ggplot() +
+  geom_boxplot(aes(x = teacher.education, y = Student.Score , group = teacher.education ,
+                   fill = factor(teacher.education)) , show.legend = FALSE) +
+  ggtitle("Teacher education effect on student score") -> p5
+
+
+```
+
+#Problem 6
+
+No!
+Although its very small (5 in 1000), Girls have performed better in comparison to the boys in the geometry.
+
+```{r, message=FALSE, warning=FALSE}
+bsg %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool, student = idstud,
+         m1 = bsmgeo01, m2 = bsmgeo02, m3 = bsmgeo03,
+         m4 = bsmgeo04, m5 = bsmgeo05) %>% 
+  mutate(Student.Score = (m1+m2+m3+m4+m5)/5) -> student
+  
+bsg %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool, student = idstud, 
+         sex = itsex) -> s.sex
+
+temp = ungroup(na.omit(full_join(student,s.sex, by = c("country","school", "student")))) 
+t.test(Student.Score ~ sex , data = temp)
+hchart(density(temp$Student.Score[temp$sex == 2]) , name = "Boys")%>% 
+  hc_add_series(density(temp$Student.Score[temp$sex == 1]) ,name = "Girls" ) %>% 
+  hc_xAxis(title = list(text = "Student Score")) %>%
+  hc_yAxis(title = list(text = "Student Score density")) %>% 
+  hc_title(text = "Student gender effect on geometry score") %>% 
+  hc_subtitle(text = "Based on TIMSS data")
+temp$sex = as.factor(temp$sex)
+levels(temp$sex) = c("Girls","Boys")
+hcboxplot(x = temp$Student.Score , var = temp$sex ) %>% hc_chart(type = "column") %>% 
+  hc_xAxis(title = list(text = "Gender")) %>%
+  hc_yAxis(title = list(text = "Student Score")) %>% 
+  hc_title(text = "Student gender effect on geometry score") %>% 
+  hc_subtitle(text = "Based on TIMSS data") 
+
+temp %>% group_by(sex) %>% 
+  ggplot() +
+  geom_boxplot(aes(x = sex, y = Student.Score , group = sex ,
+                   fill = factor(sex)) , show.legend = FALSE) +
+  ggtitle("Student gender effect on geometry score") -> p6
+
+
+
+
+```
+
+#Problem 7
+
+There is weak correlation between eating breakfast and student score.
+We can conclude from the box plot that never or always eating breakfast is better that eating breakfast sometimes. 
+
+```{r, message=FALSE, warning=FALSE}
+bsg %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool, student = idstud,
+         m1 = bsmmat01, m2 = bsmmat02, m3 = bsmmat03,
+         m4 = bsmmat04, m5 = bsmmat05) %>% 
+  mutate(Student.Score = (m1+m2+m3+m4+m5)/5) -> student
+ 
+
+bsg %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool, student = idstud, 
+         breakfast = bsbg12) %>% mutate(breakfast = -breakfast + 5) -> s.break.fast
+
+temp = ungroup(na.omit(full_join(student,s.break.fast, by = c("country","school","student")))) 
+
+cor.test(formula = ~ breakfast + Student.Score, data = temp)
+
+hchart(density(temp$Student.Score[temp$breakfast == 4]) , name = "Every Day")%>% 
+  hc_add_series(density(temp$Student.Score[temp$breakfast == 3]) ,name = "Most Days" ) %>% 
+  hc_add_series(density(temp$Student.Score[temp$breakfast == 2]) ,name = "Sometimes" ) %>% 
+  hc_add_series(density(temp$Student.Score[temp$breakfast == 1]) ,name = "Never" ) %>% 
+  hc_xAxis(title = list(text = "Student Score")) %>%
+  hc_yAxis(title = list(text = "Student Score density")) %>% 
+  hc_title(text = "Breakfast effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data")
+temp$breakfast = as.factor(temp$breakfast)
+levels(temp$breakfast) = c("Never","Somtimes","Most Days","Every Day")
+hcboxplot(x = temp$Student.Score , var = temp$breakfast ) %>% hc_chart(type = "column") %>% 
+  hc_xAxis(title = list(text = "Gender")) %>%
+  hc_yAxis(title = list(text = "Student Score")) %>% 
+  hc_title(text = "Breakfast effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data") 
+
+temp %>% group_by(breakfast) %>% 
+  ggplot() +
+  geom_boxplot(aes(x = breakfast, y = Student.Score , group = breakfast ,
+                   fill = factor(breakfast)) , show.legend = FALSE) +
+  ggtitle("Breakfast effect on student score") -> p7
+
+
+```
+
+#Problem 8
+
+I don't know how to justify it, but schools with more accommodations have students with poorer scores!
+
+```{r, message=FALSE, warning=FALSE}
+bsg %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool, student = idstud,
+         m1 = bsmmat01, m2 = bsmmat02, m3 = bsmmat03,
+         m4 = bsmmat04, m5 = bsmmat05) %>% 
+  mutate(m = (m1+m2+m3+m4+m5)/5) %>% 
+  group_by(country , school) %>% 
+  summarise(Student.Score = sum(m)/n())-> student
+
+
+
+bcg %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool, 
+         m1 = bcbg13aa, m2 = bcbg13ab, m3 = bcbg13ac,
+         m4 = bcbg13ad, m5 = bcbg13ae , m6 = bcbg13af ,
+         m7 = bcbg13ag , m8 = bcbg13ah , m9 = bcbg13ai) %>% 
+  mutate(m = m1+m2+m3+m4+m5+m6+m7+m8+m9) %>% 
+  mutate(accom = as.numeric( cut(m,breaks = 4, labels = 1:4))) %>%
+  select(country = country , school = school , ac = accom)-> s.ac
+
+  
+temp = ungroup(na.omit(full_join(student,s.ac, by = c("country","school"))))  
+cor.test(formula = ~ ac + Student.Score, data = temp)
+  
+hchart(density(temp$Student.Score[temp$ac == 1]) , name = "Not at all")%>% 
+  hc_add_series(density(temp$Student.Score[temp$ac == 2]) ,name = "A little" ) %>% 
+  hc_add_series(density(temp$Student.Score[temp$ac == 3]) , name = "Some") %>% 
+  hc_add_series(density(temp$Student.Score[temp$ac == 4]) , name = "A lot") %>% 
+  hc_xAxis(title = list(text = "Student Score")) %>%
+  hc_yAxis(title = list(text = "Student Score density")) %>% 
+  hc_title(text = "School accommodation effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data")
+
+temp$ac = as.factor(temp$ac)
+levels(temp$ac) = c("Not at all","A little","Some","A lot")
+hcboxplot(x = temp$Student.Score , var = temp$ac ) %>% hc_chart(type = "column") %>% 
+  hc_xAxis(title = list(text = "School accommodation")) %>%
+  hc_yAxis(title = list(text = "Student Score")) %>% 
+  hc_title(text = "School accommodation effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data") 
+
+temp %>% group_by(ac) %>% 
+  ggplot() +
+  geom_boxplot(aes(x = ac, y = Student.Score , group = ac ,
+                   fill = factor(ac)) , show.legend = FALSE) +
+  ggtitle("School accommodation effect on student score") -> p8
+
+```
+
+#Problem 9
+
+The answer is yes, obviously. although the question asks about the casualty of absence on the students score. Correlation does not results in casualty. By we can say that absence from school and students score is strongly correlated.
+
+```{r, message=FALSE, warning=FALSE}
+bsg %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool, student = idstud,
+         m1 = bsmmat01, m2 = bsmmat02, m3 = bsmmat03,
+         m4 = bsmmat04, m5 = bsmmat05) %>% 
+  mutate(Student.Score = (m1+m2+m3+m4+m5)/5) %>% 
+  select(country = country, school = school , student = student, Student.Score = Student.Score)-> student
+
+bsg %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool, student = idstud, 
+         presence = bsbg11)  -> s.presence
+  
+temp = ungroup(na.omit(full_join(student,s.presence, by = c("country","school","student"))))  
+cor.test(formula = ~ presence + Student.Score, data = temp)
+
+hchart(density(temp$Student.Score[temp$presence == 1]) , name = "Once a week or more")%>% 
+  hc_add_series(density(temp$Student.Score[temp$presence == 2]) ,name = "Once every two weeks" ) %>% 
+  hc_add_series(density(temp$Student.Score[temp$presence == 3]) , name = "Once a month") %>% 
+  hc_add_series(density(temp$Student.Score[temp$presence == 4]) , name = "Never or almost never") %>% 
+  hc_xAxis(title = list(text = "Student Score")) %>%
+  hc_yAxis(title = list(text = "Student Score density")) %>% 
+  hc_title(text = "Student absence from school effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data")
+
+temp$presence = as.factor(temp$presence)
+levels(temp$presence) = c("Once a week or more","Once every two weeks","Once a month","Never or almost neve")
+hcboxplot(x = temp$Student.Score , var = temp$presence ) %>% hc_chart(type = "column") %>% 
+  hc_xAxis(title = list(text = "Absence status ")) %>%
+  hc_yAxis(title = list(text = "Student Score")) %>% 
+  hc_title(text = "Student absence from school effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data") 
+
+temp %>% group_by(presence) %>% 
+  ggplot() +
+  geom_boxplot(aes(x = presence, y = Student.Score , group = presence ,
+                   fill = factor(presence)) , show.legend = FALSE) +
+  ggtitle("Student absent from school effect on student score") -> p9
+
+
+```
+
+#Extra-a
+
+Does the student education expection effect the students score? YES! with correlation = 0.24.
+
+```{r, message=FALSE, warning=FALSE}
+bsg %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool, student = idstud,
+         m1 = bsmmat01, m2 = bsmmat02, m3 = bsmmat03,
+         m4 = bsmmat04, m5 = bsmmat05) %>% 
+  mutate(Student.Score = (m1+m2+m3+m4+m5)/5) %>% 
+  select(country = country, school = school , student = student, Student.Score = Student.Score)-> student
+
+bsg %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool, student = idstud, 
+         pers = bsbg08)  -> s.pers
+
+
+temp = ungroup(na.omit(full_join(student,s.pers, by = c("country","school","student"))))  
+cor.test(formula = ~ pers + Student.Score, data = temp)
+
+hchart(density(temp$Student.Score[temp$pers == 1]) , name = " Finish Lower secondary")%>% 
+  hc_add_series(density(temp$Student.Score[temp$pers == 2]) ,name = "Finish Upper secondary" ) %>% 
+  hc_add_series(density(temp$Student.Score[temp$pers == 3]) ,name = "Finish Post-secondary, non-tertiary " ) %>% 
+  hc_add_series(density(temp$Student.Score[temp$pers == 4]) ,name = "Finish Short-cycle tertiary " ) %>% 
+  hc_add_series(density(temp$Student.Score[temp$pers == 5]) ,name = " Finish Bachelor's or equivalent") %>% 
+  hc_add_series(density(temp$Student.Score[temp$pers == 6]) ,name = " Finish Postgraduate degree" ) %>% 
+  hc_xAxis(title = list(text = "Student Score")) %>%
+  hc_yAxis(title = list(text = "Student Score density")) %>% 
+  hc_title(text = "Student education expectation  effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data")
+
+temp$pers = as.factor(temp$pers)
+levels(temp$pers) = c(" Finish Lower secondary","Finish Upper secondary","Finish Post-secondary, non-tertiary",
+                          "Finish Short-cycle tertiary","Finish Bachelor's or equivalent",
+                          "Finish Postgraduate degree")
+hcboxplot(x = temp$Student.Score , var = temp$pers ) %>% hc_chart(type = "column") %>% 
+  hc_xAxis(title = list(text = "Expectation ")) %>%
+  hc_yAxis(title = list(text = "Student Score")) %>% 
+  hc_title(text = "Student education expectation  effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data") 
+
+temp %>% group_by(pers) %>% 
+  ggplot() +
+  geom_boxplot(aes(x = pers, y = Student.Score , group = pers ,
+                   fill = factor(pers)) , show.legend = FALSE) +
+  ggtitle("Student education expectation  effect on student score") -> p10a
+
+```
+
+#Extra-b
+
+Does Teachers age effect the students score? Students with trachers with different ages have different mean in theire score, but there is a week linear correlation with them.
+
+```{r, message=FALSE, warning=FALSE}
+bsg %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool, student = idstud,
+         m1 = bsmmat01, m2 = bsmmat02, m3 = bsmmat03,
+         m4 = bsmmat04, m5 = bsmmat05) %>% 
+  mutate(m = (m1+m2+m3+m4+m5)/5) %>% 
+  group_by(country , school) %>% 
+  summarise(Student.Score = sum(m)/n())-> student
+
+btm %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool,
+         age = btbg03) %>% 
+  group_by(country, school) %>% summarise(age = sum(age)/n()) %>% 
+  mutate(age = as.numeric( cut(age,breaks = 6, labels = 1:6))) -> t.age
+
+temp = ungroup(na.omit(full_join(student,t.age, by = c("country","school"))))
+cor.test(formula = ~ age + Student.Score, data = temp)
+
+hchart(density(temp$Student.Score[temp$age == 1]), name = "Under 25") %>% 
+  hc_add_series(density(temp$Student.Score[temp$age == 2]), name = "25-29") %>% 
+  hc_add_series(density(temp$Student.Score[temp$age == 3]) , name = "30-39") %>% 
+  hc_add_series(density(temp$Student.Score[temp$age == 4]) , name =  "40-49") %>% 
+  hc_add_series(density(temp$Student.Score[temp$age == 5]) , name = "50-59") %>%
+  hc_add_series(density(temp$Student.Score[temp$age == 6]) , name = "60 or more") %>% 
+  hc_xAxis(title = list(text = "Student Score")) %>%
+  hc_yAxis(title = list(text = "Student Score density")) %>% 
+  hc_title(text = "Teacher age effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data")
+temp$age = as.factor(temp$age)
+levels(temp$age) = c(" Under 25","25-29","30-39","40-49","50-59","60 or more")
+                     
+hcboxplot(x = temp$Student.Score , var = temp$age ) %>% hc_chart(type = "column") %>% 
+  hc_xAxis(title = list(text = "Teacher age ")) %>%
+  hc_yAxis(title = list(text = "Student Score")) %>% 
+  hc_title(text = "Teacher age effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data") 
+
+temp %>% group_by(age) %>% 
+  ggplot() +
+  geom_boxplot(aes(x = age, y = Student.Score , group = age ,
+                   fill = factor(age)) , show.legend = FALSE) +
+  ggtitle("Teacher age effect on student score") -> p10b
+
+
+```
+
+Extra-c
+
+Does the city population effect the students score? YES! cities with more population have higher score mean. 
+The city population effect many other factors, like city accomodation, distance from industry and ... which might cause the students to get poorer results. 
+
+```{r, message=FALSE, warning=FALSE}
+bsg %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool, student = idstud,
+         m1 = bsmmat01, m2 = bsmmat02, m3 = bsmmat03,
+         m4 = bsmmat04, m5 = bsmmat05) %>% 
+  mutate(m = (m1+m2+m3+m4+m5)/5) %>% 
+  group_by(country , school) %>% 
+  summarise(Student.Score = sum(m)/n())-> student
+
+
+
+bcg %>% filter(idgrade == 8) %>% 
+  select(country = idcntry, school = idschool, 
+         city = bcbg05a) %>% mutate(city = -city) -> s.city
+
+temp = ungroup(na.omit(full_join(student,s.city, by = c("country","school"))))  
+cor.test(formula = ~ city + Student.Score, data = temp)
+
+hchart(density(temp$Student.Score[temp$city == -1]) , name = "More than 500,000")%>% 
+  hc_add_series(density(temp$Student.Score[temp$city == -2]) ,name = " 100,001 to 500,00" ) %>% 
+  hc_add_series(density(temp$Student.Score[temp$city == -3]) , name = "50,001 to 100,000") %>% 
+  hc_add_series(density(temp$Student.Score[temp$city == -4]) , name = "30,001 to 50,000 ") %>% 
+  hc_add_series(density(temp$Student.Score[temp$city == -5]) , name = "15,001 to 30,000") %>% 
+  hc_add_series(density(temp$Student.Score[temp$city == -6]) , name = "3,001 to 15,000 ") %>% 
+  hc_add_series(density(temp$Student.Score[temp$city == -7]) , name = "3,000 or fewer") %>% 
+  hc_xAxis(title = list(text = "Student Score")) %>%
+  hc_yAxis(title = list(text = "Student Score density")) %>% 
+  hc_title(text = "City population effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data")
+
+temp$city = as.factor(temp$city)
+levels(temp$city) = c("More than 500,000"," 100,001 to 500,00","50,001 to 100,000",
+                      "30,001 to 50,000","15,001 to 30,000","3,001 to 15,000","3,000 or fewer")
+
+hcboxplot(x = temp$Student.Score , var = temp$city ) %>% hc_chart(type = "column") %>% 
+  hc_xAxis(title = list(text = "City population ")) %>%
+  hc_yAxis(title = list(text = "Student Score")) %>% 
+  hc_title(text = "City population effect on student score") %>% 
+  hc_subtitle(text = "Based on TIMSS data") 
+
+temp %>% group_by(city) %>% 
+  ggplot() +
+  geom_boxplot(aes(x = city, y = Student.Score , group = city ,
+                   fill = factor(city)) , show.legend = FALSE) +
+  ggtitle("City population effect on student score") -> p10c
+
+```
+
+
+# ggplots
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+p1
+p2
+p3
+p4
+p5
+p6
+p7
+p8
+p9
+p10a
+p10b
+p10c
+```

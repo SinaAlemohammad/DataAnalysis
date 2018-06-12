@@ -1,0 +1,260 @@
+---
+title: "Sixth Week: Linear Models"
+subtitle: "House price prediction"
+author: "Sina Alemohammad 93111706"
+date: "`r Sys.time()`"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+<div align="center">
+<img  src="images/house.jpg"  align = 'center'>
+</div>
+---
+
+## Introduction
+
+In this study, we are going to use linear regression models to predict the price of a house based available features. I only worked with the numerical features and removed the categorical features. These are the libraries I used in this study
+
+```{r, message=FALSE, warning=FALSE}
+library(readr)
+library(dplyr)
+library(ggplot2)
+library(highcharter)
+library(pheatmap)
+library(Hmisc)
+library(car)
+library(GGally)
+```
+
+## Problem 1
+
+The correlation matrix is plotted. The correlations with less than p_pvalue = 0.01 is removes and the top ten features having the most correlation with the sale price is selected and plotted.
+
+
+```{r , echo=FALSE, message=FALSE, warning=FALSE , fig.align="center" }
+x = read_csv("train.csv")
+type = sapply(x, is.numeric)
+xn = x[,type]
+xc = x[,!type]
+
+R = rcorr(as.matrix(xn) , type = "pearson")
+
+correlation = as.matrix(as.data.frame(R[1]))
+cpval = as.matrix(as.data.frame(R[3])) 
+pheatmap(correlation)
+temp = matrix(0,nrow = 38,ncol = 38)
+temp[which(cpval < 0.01)] = 1
+correlation = abs(temp*correlation)
+
+
+m = correlation[,38]
+m = sort(m , decreasing = T)[1:10]
+m = as.data.frame(m)
+m$names = row.names(m)
+f = xn[,c(m$names,"SalePrice")]
+
+hchart(m , type = "column" , hcaes(x = names , y = m)) %>% 
+  hc_yAxis(title = list(text = "Correlation with price")) %>%
+  hc_xAxis(title = list(text = "Features name")) %>% 
+  hc_title(text = "10 most correlated variebles with price") 
+  
+
+```
+
+## Problem 2
+
+The correlation and scatter plot of every two features are plotted.As we can see, almost all of the variable have some linear relations with each other. The correlation shown at the plot give us an estimate of how much that two variables are linearly related.
+
+```{r, message=FALSE, warning=FALSE , fig.align="center"}
+my_fn <- function(data, mapping, ...){
+  p <- ggplot(data = data, mapping = mapping) + 
+    geom_point() + 
+    geom_smooth(method=loess, fill="red", color="red", ...) +
+    geom_smooth(method=lm, fill="blue", color="blue", ...)
+  p
+}
+ggpairs(f, lower = list(continuous = my_fn))
+
+```
+
+## Problem 3
+
+This is the model based on the ten most correlated features with sale price.
+
+```{r, message=FALSE, warning=FALSE , fig.align="center"}
+model = lm(formula = SalePrice ~ OverallQual + GrLivArea + GarageCars + GarageArea + TotalBsmtSF + 
+     `1stFlrSF` + FullBath + TotRmsAbvGrd + YearBuilt + YearRemodAdd , f)
+
+summary(model)
+
+```
+
+
+## Problem 4
+
+The predicted price based on the model vs the real sale price is plotted. 
+
+```{r, message=FALSE, warning=FALSE , fig.align="center"}
+predicted.price = model$fitted.values
+predicted.price = as.data.frame(predicted.price)
+sale.price = f[,11]
+price = cbind(predicted.price, sale.price)
+
+highchart() %>% 
+  hc_add_series(price,"scatter", hcaes(y = predicted.price, x = SalePrice) , name = "Predicted price") %>% 
+  hc_add_series(price , "line" , hcaes(y = SalePrice , x = SalePrice) , name = "Real price") %>% 
+  hc_xAxis(title = list(text = "Sale price")) %>% 
+  hc_xAxis(title = list(text = "Predicted price"))
+
+```
+
+
+## Problem 5
+
+The R squared is 0.77. This is not a bad result but not a very good one as well. 
+The F statistics is an statistics on the coefficients of the models with null hypothesis that all the coefficients are zeros and it has two degree of freedom. The model 1 F statistics is 495 with p_value < 2.2e-6 which rejects the hypothesis that there is no relation ship with the sale price and the selected features.
+
+```{r, message=FALSE, warning=FALSE , fig.align="center"}
+
+summary(model)$r.squared
+summary(model)$fstatistic
+
+```
+
+## Problem 6
+
+The features with coefficients p_values less than 0.001 are selected and a linear model is fitted into the data. 
+This new model has a better F statistics than the previous one. 
+
+```{r, message=FALSE, warning=FALSE , fig.align="center"}
+
+model2 = lm(formula = SalePrice ~ (OverallQual + GrLivArea + GarageCars + TotalBsmtSF + 
+             `1stFlrSF` + YearBuilt + YearRemodAdd) , f)
+
+predicted.price = model2$fitted.values
+predicted.price = as.data.frame(predicted.price)
+sale.price = f[,11]
+price = cbind(predicted.price, sale.price)
+
+highchart() %>% 
+  hc_add_series(price,"scatter", hcaes(y = predicted.price, x = SalePrice) , name = "Predicted price") %>% 
+  hc_add_series(price , "line" , hcaes(y = SalePrice , x = SalePrice) , name = "Real price") %>% 
+  hc_xAxis(title = list(text = "Sale price")) %>% 
+  hc_xAxis(title = list(text = "Predicted price"))
+
+summary(model2)
+
+```
+
+## Problem 7
+
+To check normality, the Q_Q plot is uses .
+To check heteroskedasticity the residuals Q_Q plot, residuals vs fitted value, residuals vs leverage an scale location is plotted. 
+To check independence between the sale price and the residuals, the correlation test is used. the correlation between residuals and the sale price is 0.47 with p_value less than 2.2e-16
+
+Then the outlier points that damage the result are removed.
+
+```{r, message=FALSE, warning=FALSE , fig.align="center"}
+qqPlot(model2, id.method="identify",simulate = TRUE, main="Q-Q Plot")
+
+par(mfrow=c(2,2)) 
+plot(model2)
+
+cor.test(as.matrix(sale.price) , model2$residuals) 
+
+f = f[c(-899,-692,-524, -1299 , -688, -802, -1321, -1180, -333, -1321),]
+
+
+```
+
+## Problem 8
+
+To check to model results on the test data, the model residuals vs real sale price is plotted
+
+```{r, message=FALSE, warning=FALSE , fig.align="center"}
+
+temp = (1:1451 %in% sample(1:1451 , 1168 , replace = F))
+
+f.train = f[temp,]
+f.test = f[!temp,]
+
+model3 = lm(formula = SalePrice ~ (OverallQual + GrLivArea + GarageCars + TotalBsmtSF + 
+                                     `1stFlrSF` + YearBuilt + YearRemodAdd), f.train)
+test = predict(model3 , f.test) - f.test[,11]
+colnames(test) = "test"
+t = cbind(test, f.test[,11])
+
+t %>% hchart("scatter" , hcaes(x = SalePrice, y = test)) %>% 
+  hc_xAxis(title = list(text = "Sale price")) %>% 
+  hc_xAxis(title = list(text = "Residuals"))
+
+```
+
+## Problem 9
+
+I used some second order models and used the higher order with low p value to use the final model 6.
+The model predicted price vs real sale price of model 6 is plotted. as you can see, this model that uses some of the higher order features fits the data better than the previous models. 
+The validity check plots of model 6 is also included 
+
+```{r, message=FALSE, warning=FALSE , fig.align="center"}
+
+model4 = lm(formula = SalePrice ~ (OverallQual + GrLivArea + GarageCars + TotalBsmtSF + 
+                                     `1stFlrSF` + YearBuilt + YearRemodAdd)^2, f)
+summary(model4)
+
+model5 = lm(formula = SalePrice ~ GrLivArea + OverallQual:GrLivArea + OverallQual:TotalBsmtSF + OverallQual:`1stFlrSF`+
+                                   GrLivArea:`1stFlrSF` + GrLivArea:YearBuilt + TotalBsmtSF:`1stFlrSF`, f)
+summary(model5)
+
+
+model6 = lm(formula = SalePrice ~ OverallQual + GrLivArea + GarageCars + 
+                                     `1stFlrSF` + YearRemodAdd + GrLivArea:OverallQual +
+                                     OverallQual:TotalBsmtSF + GrLivArea:YearBuilt + TotalBsmtSF:`1stFlrSF`, f)
+summary(model6)
+
+test = model6$fitted.values
+t = cbind(test, f[,11])
+
+highchart() %>% 
+  hc_add_series(t,"scatter", hcaes(y = test, x = SalePrice) , name = "Predicted price") %>% 
+  hc_add_series(t, "line" , hcaes(y = SalePrice , x = SalePrice) , name = "Real price") %>% 
+  hc_xAxis(title = list(text = "Sale price")) %>% 
+  hc_xAxis(title = list(text = "Predicted price"))
+
+par(mfrow=c(2,2)) 
+plot(model6)
+
+
+```
+
+## Problem 10
+
+I used the model 6 for the kaggle test data. The results is included in the folder. 
+
+```{r, eval=FALSE, message=FALSE, warning=FALSE}
+
+test = read_csv("test.csv")
+test = test[,m$names]
+pp = as.data.frame(predict(model6 , test))
+colnames(pp) <- c("SalePrice")
+m = mean(as.matrix(pp) , na.rm = T)
+write.csv(pp, file = "test.price.csv")
+
+```
+
+My rank is 3054 in the competition with score 0.17370. 
+
+<div align="center">
+<img  src="images/rank.png"  align = 'center'>
+</div>
+
+
+This is the link to the leader board : <https://www.kaggle.com/c/house-prices-advanced-regression-techniques/leaderboard>
+
+
+
+
+
